@@ -583,8 +583,8 @@ ocaml_alloc_shared_tx_space(value v_ring, value v_len)
   }
   /* offset is ptr into ring, and len will be set to amount
   * that was actually allocated (XXX i think) */
-  Store_field(v_ret, 0, offset);
-  Store_field(v_ret, 1, len);
+  Store_field(v_ret, 0, Val_int(offset));
+  Store_field(v_ret, 1, Val_int(len));
   fprintf(stderr, "alloc_shared_space: requested %d got %u at off %d\n", Int_val(v_len), len, offset);
   CAMLreturn(v_ret);
 }
