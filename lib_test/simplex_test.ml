@@ -33,20 +33,33 @@ let rec was_successful =
     | RTodo _::_ ->
         false
 
-let allocate_test =
-  let fn size () =
+let alloc_release_loop ~ring ~total_size ~alloc_size =
+  for i = 0 to 100000 do
+    match Simplex.alloc ring alloc_size with
+    |Some extent ->
+      assert_equal alloc_size (Simplex.length extent);
+      Simplex.release ring extent;
+    |None -> assert_failure "allocate failed"
+   done
+
+let allocate_release_test =
+  let fn ~total_size ~alloc_size () =
     let shm = Shm.open_anonymous () in
-    let ring = Simplex.attach_tx shm size in
-    for i = 0 to 100 do
-       match Simplex.alloc ring 1024 with
-       |Some ext -> Simplex.release ring ext
-       |None -> assert_failure "allocate_test failed"
-    done
+    let ring = Simplex.attach_tx shm total_size in
+    alloc_release_loop ~ring ~total_size ~alloc_size
   in
-  "allocate_test" >:: (fn 4096)
+  (* total sizes must be page aligned *)
+  let total_sizes = [4096; 8192; 16384] in
+  let alloc_sizes = [1;2;3;7;8;128;256;1024;1025] in
+  List.flatten (List.map (fun total_size ->
+    List.map (fun alloc_size ->
+      sprintf "allocate_test_%d_%d" total_size alloc_size >::
+      (fn ~total_size ~alloc_size)
+    ) alloc_sizes
+  ) total_sizes)
 
 let _ =
-  let suite = "Simplex" >::: [allocate_test] in
+  let suite = "Simplex" >::: allocate_release_test in
   let verbose = ref false in
   let set_verbose _ = verbose := true in
   Arg.parse
