@@ -1,0 +1,40 @@
+OASISFormat: 0.2
+Name:        workflow
+Version:     0.1-wip
+Synopsis:    Persistent workflow engine for parallel computation
+Authors:     Anil Madhavapeddy
+License:     ISC
+Plugins:     META (0.2)
+BuildTools:  ocamlbuild
+
+Library workflow
+  Path:       lib
+  Findlibname: workflow
+  Modules: Shm,Simplex,Shmem_pipe
+  BuildDepends:	lwt.syntax, lwt, lwt.unix, ocamlgraph
+  CSources: shmem_stubs.c,simplex_stubs.c
+
+Flag tests
+  Description:        Build tests
+  Default:            true
+
+Executable shmem_pipe_test
+  Path:               lib_test
+  MainIs:             shmem_pipe_test.ml
+  Custom:             true
+  CompiledObject:     best
+  Install:            false
+  BuildDepends:       workflow,lwt,lwt.unix
+
+Executable simplex_test
+  Path:               lib_test
+  MainIs:             simplex_test.ml
+  Custom:             true
+  CompiledObject:     best
+  Install:            false
+  BuildDepends:       workflow,lwt,lwt.unix,oUnit
+
+Test simplex_test
+  Run$:               flag(tests)
+  Command:            $simplex_test
+  WorkingDirectory:   lib_test
