@@ -29,7 +29,7 @@ module Raw = struct
    * establish a shared memory ring.
    *)
   external attach: Shm.shm_descr -> mode -> int -> 'a ring = "ocaml_simplex_alloc"
-  external free_space: 'a ring -> int = "ocaml_any_shared_space"
+  external free_space: 'a ring -> bool = "ocaml_any_shared_space"
   external alloc: 'a ring -> int -> extent = "ocaml_alloc_shared_tx_space"
   external buf_of_extent: 'a ring -> int -> int -> buf = "ocaml_alloc_shared_extent"
   external release: 'a ring -> int -> int -> unit = "ocaml_release_shared_extent"
@@ -63,3 +63,4 @@ let buffer ring (off,len) =
   Raw.buf_of_extent ring off len
 
 let length (off,len) = len
+let offset (off,len) = off

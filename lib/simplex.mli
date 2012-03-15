@@ -21,9 +21,10 @@ type buf = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1
 val attach_tx : Shm.shm_descr -> int -> [`tx] ring
 val attach_rx : Shm.shm_descr -> int -> [`rx] ring
 
-val has_free_space : [`tx] ring -> int
+val has_free_space : [`tx] ring -> bool
 
 val alloc : [`tx] ring -> int -> extent option
 val release : [`tx] ring -> extent -> unit
 val buffer : [`tx | `rx] ring -> extent -> buf
 val length : extent -> int
+val offset : extent -> int
