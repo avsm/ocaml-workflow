@@ -109,40 +109,6 @@ struct shmem_simplex {
 #endif
 };
 
-#if 0
-/* A bi-directional shared memory buffer, consisting of two simplex
- * shared memory connections, and a metadata pipe to coordinate extents
- * flowing across them. */
-struct shmem_handle {
-  int fd;
-
-  /* Buffering on the file descriptor */
-  unsigned char rx_buf[EXTENT_BUFFER_SIZE]; /* Stuff we've received from the other end */
-  unsigned rx_buf_prod;
-  unsigned rx_buf_cons;
-
-  /* Messages which we've got queued up to send to the other side.
-   * Most of the time, this will just contain release messages, but we
-   * can also marshall send messages in here during send
-   * operations. */
-  struct extent outgoing_extents[EXTENT_BUFFER_SIZE/sizeof(struct extent) + 1];
-  unsigned nr_outgoing_extents;
-  unsigned outgoing_extent_bytes;
-
-  /* Human-readable name for this connection */
-  char *name;
-
-  /* The two uni-directional data channels */
-  struct shmem_simplex *send;
-  struct shmem_simplex *recv;
-};
-#endif
-
-struct shmem_pipe_buf {
-  struct fable_buf base;
-  struct iovec iov;
-};
-
 /* Our allocation structure is a simple linked list.  That's pretty
  * stupid, *except* that the allocation pattern is almost always a
  * very simple queue, so it becomes very simple.  i.e. we release
