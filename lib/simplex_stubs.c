@@ -526,7 +526,6 @@ shmem_simplex_init(struct shmem_simplex *sh, int shmem_fd, int mode, size_t nr_b
 static void
 simplex_wrap_finalize(value v_sh)
 {
-  fprintf(stderr, "simplex_wrap_finalize: %p\n", (void *)v_sh);
   struct shmem_simplex *sh = Simplex_wrap_val(v_sh);
   if (sh==NULL) {
     fprintf (stderr, "panic: simplex_wrap_finalize already NULL\n");
@@ -542,7 +541,6 @@ ocaml_simplex_alloc(value v_fd, value v_mode, value v_nr_bytes)
 {
   CAMLparam3(v_fd, v_mode, v_nr_bytes);
   CAMLlocal1(v_sh);
-  fprintf(stderr, "ocaml_simplex_alloc: fd=%d mode=%d bytes=%d\n", Int_val(v_fd), Int_val(v_mode), Int_val(v_nr_bytes));
   v_sh = caml_alloc_final(2, simplex_wrap_finalize, 1, 100);
   Simplex_wrap_val(v_sh) = NULL;
   struct shmem_simplex *sh = caml_stat_alloc(sizeof (struct shmem_simplex));
@@ -585,7 +583,6 @@ ocaml_alloc_shared_tx_space(value v_ring, value v_len)
   * that was actually allocated (XXX i think) */
   Store_field(v_ret, 0, Val_int(offset));
   Store_field(v_ret, 1, Val_int(len));
-  fprintf(stderr, "alloc_shared_space: requested %d got %u at off %d\n", Int_val(v_len), len, offset);
   CAMLreturn(v_ret);
 }
 
@@ -597,7 +594,6 @@ ocaml_alloc_shared_extent(value v_ring, value v_off, value v_len)
   CAMLparam3(v_ring, v_off, v_len);
   CAMLlocal1(v_arr);
   struct shmem_simplex *sh = Simplex_wrap_val(v_ring);
-  fprintf(stderr, "ocaml_alloc_shared_rx_space %d %d\n", Int_val(v_off), Int_val(v_len));
   int len = Int_val(v_len);
   void *data = sh->ring + Int_val(v_off); /* XXX bounds check */
   v_arr = caml_ba_alloc_dims(CAML_BA_EXTERNAL | CAML_BA_UINT8 | CAML_BA_C_LAYOUT, 1, data, len);
@@ -609,7 +605,6 @@ ocaml_release_shared_extent(value v_ring, value v_off, value v_len)
 {
   CAMLparam3(v_ring, v_off, v_len);
   struct shmem_simplex *sh = Simplex_wrap_val(v_ring);
-  fprintf(stderr, "ocaml_release_shared_rx_space %d %d\n", Int_val(v_off), Int_val(v_len));
   release_shared_space(sh, Int_val(v_off), Int_val(v_len));
   CAMLreturn(Val_unit);
 }
