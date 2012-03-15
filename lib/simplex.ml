@@ -59,5 +59,7 @@ let alloc ring len =
 let release ring (off,len) =
   Raw.release ring off len
 
-let buf_of_extent ring (off,len) =
+let buffer ring (off,len) =
   Raw.buf_of_extent ring off len
+
+let length (off,len) = len
