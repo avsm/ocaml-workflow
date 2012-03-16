@@ -24,13 +24,15 @@ let dprintf fmt =
 let listen_t () =
   let name = "foo" in
   let fn h =
-    dprintf "listen: new handle\n%!";
-    let rx_t, tx_fn = Shmem_pipe.streams_of_handle h in
-    dprintf "listen: got streams\n%!";
-    let ext = Simplex.alloc h.Shmem_pipe.tx 128 in
-    dprintf "listen: alloc\n%!";
-    tx_fn ext;
-    dprintf "listen: push\n%!";
+    let rx, tx_send, tx_release, tx_close, tx_alloc = Shmem_pipe.streams_of_handle h in
+    for_lwt i = 0 to 1000 do
+      let data = sprintf "data iteration %d\n%!" i in
+      lwt ext = tx_alloc (String.length data) in
+      let buf = Simplex.buffer (h.Shmem_pipe.tx) ext in
+      Lwt_bytes.blit_string_bytes data 0 buf 0 (String.length data);
+      tx_send ext;
+      return ()
+    done >>
     Lwt_unix.sleep 2.0
   in
   let listen_t = Shmem_pipe.listen ~name fn in
@@ -38,20 +40,20 @@ let listen_t () =
 
 let connect_t () =
   let name = "foo" in
-  dprintf "CONNECT_t: start\n%!";
   lwt ch = Shmem_pipe.connect ~name () in
-  let (rx_t, tx_fn) = Shmem_pipe.streams_of_handle ch in
-  dprintf "CONNECT_t: got streams\n%!";
-  let (rx_t, tx_fn) = Shmem_pipe.streams_of_handle ch in
-  let t = Lwt_stream.iter_s (fun ext ->
-    dprintf "connect rx got extent\n%!";
-    return ()
-  ) rx_t in
+  let rx, tx_send, tx_release, tx_close, tx_alloc = Shmem_pipe.streams_of_handle ch in
+  let t = Lwt_stream.iter_s
+    (fun ext ->
+      let buf = Simplex.buffer (ch.Shmem_pipe.rx) ext in
+      eprintf "recv: %S\n%!" (Lwt_bytes.to_string buf);
+      return ()
+    ) rx 
+  in
   t
 
 let _ = 
   (* Fork two processes *)
-  match Unix.fork () with
+  match Lwt_unix.fork () with
   |0 -> begin (* child *)
     (* sleep for a bit, and then try to connect to the parent *)
     Unix.sleep 1;
