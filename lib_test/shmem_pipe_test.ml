@@ -17,10 +17,20 @@
 open Lwt
 open Printf
 
+let dprintf fmt =
+  let xfn ch = fprintf ch fmt in
+  kfprintf xfn stderr "[%d] " (Unix.getpid())
+
 let listen_t () =
   let name = "foo" in
-  let fn handle =
-    eprintf "new handle\n%!";
+  let fn h =
+    dprintf "listen: new handle\n%!";
+    let rx_t, tx_fn = Shmem_pipe.streams_of_handle h in
+    dprintf "listen: got streams\n%!";
+    let ext = Simplex.alloc h.Shmem_pipe.tx 128 in
+    dprintf "listen: alloc\n%!";
+    tx_fn ext;
+    dprintf "listen: push\n%!";
     Lwt_unix.sleep 2.0
   in
   let listen_t = Shmem_pipe.listen ~name fn in
@@ -28,7 +38,16 @@ let listen_t () =
 
 let connect_t () =
   let name = "foo" in
-  Shmem_pipe.connect ~name ()
+  dprintf "CONNECT_t: start\n%!";
+  lwt ch = Shmem_pipe.connect ~name () in
+  let (rx_t, tx_fn) = Shmem_pipe.streams_of_handle ch in
+  dprintf "CONNECT_t: got streams\n%!";
+  let (rx_t, tx_fn) = Shmem_pipe.streams_of_handle ch in
+  let t = Lwt_stream.iter_s (fun ext ->
+    dprintf "connect rx got extent\n%!";
+    return ()
+  ) rx_t in
+  t
 
 let _ = 
   (* Fork two processes *)
@@ -39,13 +58,13 @@ let _ =
     (try
       Lwt_unix.run (connect_t ())
     with Unix.Unix_error (e,_,_) as exn ->
-      eprintf "%s (%s)\n%!" (Printexc.to_string exn) (Unix.error_message e));
-    eprintf "child: exit\n%!"
+      dprintf "%s (%s)\n%!" (Printexc.to_string exn) (Unix.error_message e));
+    dprintf "child: exit\n%!"
   end
   |pid -> begin (* parent *)
     (try
       Lwt_unix.run (listen_t ())
     with Unix.Unix_error (e,_,_) as exn ->
-      eprintf "%s (%s)\n%!" (Printexc.to_string exn) (Unix.error_message e));
-    eprintf "parent: exit\n%!"
+      dprintf "%s (%s)\n%!" (Printexc.to_string exn) (Unix.error_message e));
+    dprintf "parent: exit\n%!"
   end

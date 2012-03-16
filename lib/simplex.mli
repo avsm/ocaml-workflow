@@ -25,6 +25,6 @@ val has_free_space : [`tx] ring -> bool
 
 val alloc : [`tx] ring -> int -> extent option
 val release : [`tx] ring -> extent -> unit
-val buffer : [`tx | `rx] ring -> extent -> buf
+val buffer : [<`tx | `rx] ring -> extent -> buf
 val length : extent -> int
 val offset : extent -> int

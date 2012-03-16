@@ -50,6 +50,6 @@
 <lib_test/*.ml{,i}>: pkg_lwt
 <lib_test/shmem_pipe_test.{native,byte}>: custom
 # OASIS_STOP
-<lib/*>: syntax_camlp4o
-<lib/*>: pkg_lwt.syntax
+<lib{,_test}/*>: syntax_camlp4o
+<lib{,_test}/*>: pkg_lwt.syntax
 true: annot
