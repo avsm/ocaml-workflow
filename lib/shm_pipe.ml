@@ -28,9 +28,9 @@ type handle = {
   rx: [`rx] Simplex.ring;
 }
 
-type metadata =
-  |Free of Simplex.extent (* Free an extent with the sender *)
-  |Send of Simplex.extent (* Send a new extent to the receiver *)
+type 'a metadata =
+  |Free of 'a Simplex.extent (* Free an extent with the sender *)
+  |Send of 'a Simplex.extent (* Send a new extent to the receiver *)
 
 let dprintf fmt =
   let xfn ch = fprintf ch fmt in
@@ -86,7 +86,7 @@ let streams_of_handle handle =
   (* Transmit stream handler *)
   let tx_stream, tx_push = Lwt_stream.create () in
   let tx_t =
-    Lwt_stream.iter_s (fun (data : metadata) ->
+    Lwt_stream.iter_s (fun (data : 'a metadata) ->
        Lwt_io.write_value oc data
     ) tx_stream
   in
@@ -102,7 +102,7 @@ let streams_of_handle handle =
       match_lwt Lwt_io.read_value ic with
       |Free extent -> begin
         (* This frees the extent on our sender ring *)
-        Simplex.release handle.tx extent;
+        Simplex.release extent;
         match Lwt_sequence.take_opt_l tx_waiters with
         |None -> return ()
         |Some u -> Lwt.wakeup u (); return () (* Wake up the waiter *)
@@ -116,7 +116,6 @@ let streams_of_handle handle =
   in
   let stream_t = tx_t <&> metadata_t in
   rx_stream, tx_send, tx_release, tx_close, tx_alloc
-
 
 (* A connect consists of a single handshake "packet" that
  * contains data with handshake information, and two file

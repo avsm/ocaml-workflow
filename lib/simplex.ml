@@ -22,7 +22,7 @@ type 'a ring
 module Raw = struct
   type mode = Recv | Send
   type extent = int * int (* offset * length, -1 if error *)
-  type buf =(char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
+  type buf = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
 
   (* Given a shared memory file descriptor (usually obtained by shm_open(2),
    * and which end of the transport this is, and the size of the shared area,
@@ -38,7 +38,7 @@ module Raw = struct
   |_ -> true
 end
 
-type extent = Raw.extent
+type 'a extent = 'a ring * Raw.extent
 type buf = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
 
 let attach_tx fd nr_bytes  =
@@ -53,14 +53,18 @@ let has_free_space ring =
 let alloc ring len =
   let extent = Raw.alloc ring len in
   match Raw.valid_extent extent with
-  |true -> Some extent
+  |true -> Some (ring, extent)
   |false -> None
 
-let release ring (off,len) =
+let release (ring, (off,len)) =
   Raw.release ring off len
 
-let buffer ring (off,len) =
+let buffer (ring, (off,len)) =
   Raw.buf_of_extent ring off len
 
-let length (off,len) = len
-let offset (off,len) = off
+let length (_,(off,len)) = len
+let offset (_,(off,len)) = off
+
+let is_member ring (ring',_) =
+  ring == ring'
+
