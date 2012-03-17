@@ -58,7 +58,7 @@ let allocate_release_test =
         match Simplex.alloc ring alloc_size with
         |Some extent ->
           assert_equal alloc_size (Simplex.length extent);
-          Simplex.release ring extent;
+          Simplex.release extent;
         |None -> assert_failure "allocate failed"
        done
     )
