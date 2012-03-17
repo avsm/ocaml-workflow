@@ -82,7 +82,6 @@ let streams_of_handle handle =
         end else
           return extent
     end
-       
   in
   (* Transmit stream handler *)
   let tx_stream, tx_push = Lwt_stream.create () in
@@ -117,6 +116,7 @@ let streams_of_handle handle =
   in
   let stream_t = tx_t <&> metadata_t in
   rx_stream, tx_send, tx_release, tx_close, tx_alloc
+
 
 (* A connect consists of a single handshake "packet" that
  * contains data with handshake information, and two file
@@ -211,7 +211,6 @@ let connect ~name () =
   lwt _ = Lwt_unix.send_msg ~socket:fd ~io_vectors ~fds in 
   Lwt_unix.close fd >>
   Lwt_unix.close md2 >>
-  (* XXX close md2 here *)
   (* receive the response from the metadata socket *)
   let io_vectors, buffer = make_recv_ivs () in
   lwt d, fds = Lwt_unix.recv_msg ~socket:md1 ~io_vectors in
