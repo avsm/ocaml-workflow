@@ -25,15 +25,15 @@ let listen_t () =
   let name = "foo" in
   let fn h =
     let rx, tx_send, tx_release, tx_close, tx_alloc = Shmem_pipe.streams_of_handle h in
-    for_lwt i = 0 to 1000 do
-      let data = sprintf "data iteration %d\n%!" i in
+    for_lwt i = 0 to 10000 do
+      let data = sprintf "%d*\n%!" i in
       lwt ext = tx_alloc (String.length data) in
       let buf = Simplex.buffer (h.Shmem_pipe.tx) ext in
       Lwt_bytes.blit_string_bytes data 0 buf 0 (String.length data);
       tx_send ext;
       return ()
     done >>
-    Lwt_unix.sleep 2.0
+    Lwt_unix.sleep 5.0
   in
   let listen_t = Shmem_pipe.listen ~name fn in
   listen_t
@@ -45,7 +45,8 @@ let connect_t () =
   let t = Lwt_stream.iter_s
     (fun ext ->
       let buf = Simplex.buffer (ch.Shmem_pipe.rx) ext in
-      eprintf "recv: %S\n%!" (Lwt_bytes.to_string buf);
+      dprintf "recv: %S\n%!" (Lwt_bytes.to_string buf);
+      tx_release ext;
       return ()
     ) rx 
   in

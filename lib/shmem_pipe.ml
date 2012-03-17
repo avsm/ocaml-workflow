@@ -65,36 +65,43 @@ let streams_of_handle handle =
   let rec tx_alloc len =
     match Simplex.alloc handle.tx len with
     |None -> (* Not enough space on the transmit queue, so block *)
-       dprintf "tx_alloc: block\n%!";
        let t,u = Lwt.task () in
        let node = Lwt_sequence.add_r u tx_waiters in
        Lwt.on_cancel t (fun () -> Lwt_sequence.remove node);
        lwt () = t in
        tx_alloc len
-    |Some extent ->
-       dprintf "tx_alloc: ok\n%!";
-       return extent
+    |Some extent -> begin
+       (* If there isn't enough room, then release the extent
+        * immediately and block until more is free *)
+        if Simplex.length extent < len then begin
+          let t,u = Lwt.task () in
+          let node = Lwt_sequence.add_r u tx_waiters in
+          Lwt.on_cancel t (fun () -> Lwt_sequence.remove node);
+          lwt () = t in
+          tx_alloc len
+        end else
+          return extent
+    end
+       
   in
   (* Transmit stream handler *)
   let tx_stream, tx_push = Lwt_stream.create () in
   let tx_t =
     Lwt_stream.iter_s (fun (data : metadata) ->
-       eprintf "tx_push %s\n%!" (match data with |Send _ -> "send" |Free _ -> "free");
-       Lwt_io.write_value oc data >>
-       Lwt_io.flush oc
+       Lwt_io.write_value oc data
     ) tx_stream
   in
   (* Wrapper functions to push the correct metadata *)
   let tx_send extent = tx_push (Some (Send extent)) in
   let tx_release extent = tx_push (Some (Free extent)) in
   let tx_close () = tx_push None in
+  let d = ref 0 in
   (* The metadata pipe coordinates all this *)
   let metadata_t =
     (* Create a buffered pipe *)
     while_lwt true do
       match_lwt Lwt_io.read_value ic with
       |Free extent -> begin
-        dprintf "metadata: received Free (%d,%d)\n%!" (Simplex.offset extent) (Simplex.length extent);
         (* This frees the extent on our sender ring *)
         Simplex.release handle.tx extent;
         match Lwt_sequence.take_opt_l tx_waiters with
@@ -102,7 +109,6 @@ let streams_of_handle handle =
         |Some u -> Lwt.wakeup u (); return () (* Wake up the waiter *)
       end   
       |Send extent -> begin (* Create an extent on our receiver ring *)
-        dprintf "metadata: received Send (%d,%d)\n%!" (Simplex.offset extent) (Simplex.length extent);
         match Lwt_sequence.take_opt_l rx_waiters with
         |None -> let _ = Lwt_sequence.add_r extent rx_q in return ()
         |Some u -> Lwt.wakeup u (Some extent); return ()
@@ -110,7 +116,6 @@ let streams_of_handle handle =
     done
   in
   let stream_t = tx_t <&> metadata_t in
-  dprintf "streams_of_handle OK\n%!";
   rx_stream, tx_send, tx_release, tx_close, tx_alloc
 
 (* A connect consists of a single handshake "packet" that
@@ -198,7 +203,7 @@ let connect ~name () =
   lwt shmfd = alloc_shm nr_bytes in
   let send_ring_tx = Simplex.attach_tx shmfd nr_bytes in
   (* allocate a socket pair for metadata *)
-  let md1, md2 = Lwt_unix.(socketpair PF_UNIX SOCK_DGRAM 0) in
+  let md1, md2 = Lwt_unix.(socketpair PF_UNIX SOCK_STREAM 0) in
   (* send the handshake message to the listen socket *)
   let client_h = { hc_name; hc_tx_len=nr_bytes } in
   let fds = [ (Lwt_unix.unix_file_descr md2); (Shm.unix_descr_of_shm shmfd) ] in
