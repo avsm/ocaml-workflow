@@ -24,27 +24,27 @@ let dprintf fmt =
 let listen_t () =
   let name = "foo" in
   let fn h =
-    let rx, tx_send, tx_release, tx_close, tx_alloc = Shmem_pipe.streams_of_handle h in
+    let rx, tx_send, tx_release, tx_close, tx_alloc = Shm_pipe.streams_of_handle h in
     for_lwt i = 0 to 10000 do
       let data = sprintf "%d*\n%!" i in
       lwt ext = tx_alloc (String.length data) in
-      let buf = Simplex.buffer (h.Shmem_pipe.tx) ext in
+      let buf = Simplex.buffer (h.Shm_pipe.tx) ext in
       Lwt_bytes.blit_string_bytes data 0 buf 0 (String.length data);
       tx_send ext;
       return ()
     done >>
     Lwt_unix.sleep 5.0
   in
-  let listen_t = Shmem_pipe.listen ~name fn in
+  let listen_t = Shm_pipe.listen ~name fn in
   listen_t
 
 let connect_t () =
   let name = "foo" in
-  lwt ch = Shmem_pipe.connect ~name () in
-  let rx, tx_send, tx_release, tx_close, tx_alloc = Shmem_pipe.streams_of_handle ch in
+  lwt ch = Shm_pipe.connect ~name () in
+  let rx, tx_send, tx_release, tx_close, tx_alloc = Shm_pipe.streams_of_handle ch in
   let t = Lwt_stream.iter_s
     (fun ext ->
-      let buf = Simplex.buffer (ch.Shmem_pipe.rx) ext in
+      let buf = Simplex.buffer (ch.Shm_pipe.rx) ext in
       dprintf "recv: %S\n%!" (Lwt_bytes.to_string buf);
       tx_release ext;
       return ()

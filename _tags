@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 527f94ef602455fbd929a8cf69204868)
+# DO NOT EDIT (digest: d13d64106fa4c9d0c36a618cc4963f8c)
 # Ignore VCS directories, you can use the same kind of rule outside 
 # OASIS_START/STOP if you want to exclude directories that contains 
 # useless stuff for the build process
@@ -24,10 +24,10 @@
 "lib/shmem_stubs.c": pkg_lwt.unix
 "lib/shmem_stubs.c": pkg_lwt.syntax
 "lib/shmem_stubs.c": pkg_lwt
-"lib/shmem_pipe_stubs.c": pkg_ocamlgraph
-"lib/shmem_pipe_stubs.c": pkg_lwt.unix
-"lib/shmem_pipe_stubs.c": pkg_lwt.syntax
-"lib/shmem_pipe_stubs.c": pkg_lwt
+"lib/simplex_stubs.c": pkg_ocamlgraph
+"lib/simplex_stubs.c": pkg_lwt.unix
+"lib/simplex_stubs.c": pkg_lwt.syntax
+"lib/simplex_stubs.c": pkg_lwt
 # Executable simplex_test
 <lib_test/simplex_test.{native,byte}>: use_workflow
 <lib_test/simplex_test.{native,byte}>: pkg_ocamlgraph
@@ -37,18 +37,18 @@
 <lib_test/simplex_test.{native,byte}>: pkg_lwt
 <lib_test/*.ml{,i}>: pkg_oUnit
 <lib_test/simplex_test.{native,byte}>: custom
-# Executable shmem_pipe_test
-<lib_test/shmem_pipe_test.{native,byte}>: use_workflow
-<lib_test/shmem_pipe_test.{native,byte}>: pkg_ocamlgraph
-<lib_test/shmem_pipe_test.{native,byte}>: pkg_lwt.unix
-<lib_test/shmem_pipe_test.{native,byte}>: pkg_lwt.syntax
-<lib_test/shmem_pipe_test.{native,byte}>: pkg_lwt
+# Executable shm_pipe_test
+<lib_test/shm_pipe_test.{native,byte}>: use_workflow
+<lib_test/shm_pipe_test.{native,byte}>: pkg_ocamlgraph
+<lib_test/shm_pipe_test.{native,byte}>: pkg_lwt.unix
+<lib_test/shm_pipe_test.{native,byte}>: pkg_lwt.syntax
+<lib_test/shm_pipe_test.{native,byte}>: pkg_lwt
 <lib_test/*.ml{,i}>: use_workflow
 <lib_test/*.ml{,i}>: pkg_ocamlgraph
 <lib_test/*.ml{,i}>: pkg_lwt.unix
 <lib_test/*.ml{,i}>: pkg_lwt.syntax
 <lib_test/*.ml{,i}>: pkg_lwt
-<lib_test/shmem_pipe_test.{native,byte}>: custom
+<lib_test/shm_pipe_test.{native,byte}>: custom
 # OASIS_STOP
 <lib{,_test}/*>: syntax_camlp4o
 <lib{,_test}/*>: pkg_lwt.syntax
