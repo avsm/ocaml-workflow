@@ -76,18 +76,6 @@ struct fable_buf {
 //#define DBGPRINT printf
 #define DBGPRINT(...) do {} while (0)
 
-/* The extents which we poke into the ancillary pipe can represent
- * either data to be consumed by the receiver or buffers which have
- * been released by the sender. 
- */
-struct extent {
-  unsigned base1:30;
-#define EXTENT_TYPE_RELEASE 1
-#define EXTENT_TYPE_DATA 2
-  unsigned type:2;
-  unsigned size;
-};
-
 /* Parameters for a simplex connection. Currently just tracks if the
  * buffer is the sender or receiver end. */
 typedef struct {
