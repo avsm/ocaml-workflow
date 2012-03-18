@@ -22,7 +22,8 @@ val attach_tx : Shm.shm_descr -> int -> [`tx] ring
 val attach_rx : Shm.shm_descr -> int -> [`rx] ring
 
 val has_free_space : [`tx] ring -> bool
-val is_member : 'a ring -> 'a extent -> bool
+val extent_is_member : 'a ring -> 'a extent -> bool
+val buf_is_member : 'a ring -> buf -> bool
 
 val alloc   : [`tx] ring -> int -> [`tx] extent option
 val release : [`tx] extent -> unit

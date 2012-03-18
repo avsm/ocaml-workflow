@@ -33,6 +33,7 @@ module Raw = struct
   external alloc: 'a ring -> int -> extent = "ocaml_alloc_shared_tx_space"
   external buf_of_extent: 'a ring -> int -> int -> buf = "ocaml_alloc_shared_extent"
   external release: 'a ring -> int -> int -> unit = "ocaml_release_shared_extent"
+  external ba_is_member: 'a ring -> buf -> bool = "ocaml_ba_is_member"
   let valid_extent = function
   |(-1,-1) -> false
   |_ -> true
@@ -67,6 +68,9 @@ let buffer (ring, (off,len)) =
 let length (_,(off,len)) = len
 let offset (_,(off,len)) = off
 
-let is_member ring (ring',_) =
+let extent_is_member ring (ring',_) =
   ring == ring'
+
+let buf_is_member ring buf =
+  Raw.ba_is_member ring buf
 

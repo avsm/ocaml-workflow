@@ -600,3 +600,21 @@ ocaml_release_shared_extent(value v_ring, value v_off, value v_len)
   release_shared_space(sh, Int_val(v_off), Int_val(v_len));
   CAMLreturn(Val_unit);
 }
+
+/* Given a Simplex and a bigarray, test if the underlying buffer
+ * is a member of the ring memory, or is allocated elsewhere. 
+ */
+value
+ocaml_ba_is_member(value v_ring, value v_ba)
+{
+  CAMLparam2(v_ring, v_ba);
+  struct shmem_simplex *sh = Simplex_wrap_val(v_ring);
+  void *dst_data = Caml_ba_data_val(v_ba);
+  void *src_data = sh->ring;
+  if (dst_data < src_data)
+    CAMLreturn(Val_int(0));
+  if (dst_data >= (src_data + (sh->ring_pages * PAGE_SIZE)))
+    CAMLreturn(Val_int(0));
+  CAMLreturn(Val_int(1));
+}
+
