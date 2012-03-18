@@ -73,3 +73,14 @@ let extent_is_member ring (ring',_) =
 let buf_is_member ring buf =
   Raw.ba_is_member ring buf
 
+type op =
+|Send of int * int
+|Free of int * int
+
+let to_send_op (_,(off,len)) = Send (off,len)
+let to_free_op (_,(off,len)) = Free (off,len)
+let on_op ~rx ~tx ~send ~free =
+  function
+  |Send (off,len) -> send (rx, (off,len))
+  |Free (off,len) -> free (tx, (off,len))
+

@@ -30,3 +30,11 @@ val release : [`tx] extent -> unit
 val buffer  : [<`tx|`rx] extent -> buf
 val length  : [<`tx|`rx] extent -> int
 val offset  : [<`tx|`rx] extent -> int
+
+(* Metadata operations to free received extents or transmit new extents *)
+type op
+val to_send_op : 'a extent -> op
+val to_free_op : 'a extent -> op
+(* Multiplex a received operation to the respective handlers *)
+val on_op : rx:([`rx] ring) -> tx:([`tx] ring) ->
+  send:([`rx] extent -> unit) -> free:([`tx] extent -> unit) -> op -> unit
