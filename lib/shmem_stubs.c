@@ -38,7 +38,7 @@ ocaml_shm_open(value v_name, value v_rw, value v_creat, value v_excl, value v_tr
   path = caml_stat_alloc(caml_string_length(v_name)+1);
   strcpy(path, String_val(v_name)); 
   enter_blocking_section();
-  fd = shm_open(path, flags);
+  fd = shm_open(path, flags, S_IRUSR | S_IWUSR);
   leave_blocking_section();
   caml_stat_free(path);
   if (fd == -1)
