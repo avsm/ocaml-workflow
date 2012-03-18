@@ -41,18 +41,24 @@ let with_alloc_pattern name ~total_sizes ~alloc_sizes test =
       List.map (fun alloc_size ->
         let shm = Shm.open_anonymous () in
         let ring = Simplex.attach_tx shm total_size in
-        sprintf "%s_%d_%d" name total_size alloc_size >::
         test ~ring ~total_size ~alloc_size
       ) alloc_sizes
     ) total_sizes
   )
+
+let test_with_alloc_pattern name ~total_sizes ~alloc_sizes test =
+  with_alloc_pattern name ~total_sizes ~alloc_sizes
+    (fun ~ring ~total_size ~alloc_size ->
+       sprintf "%s_%d_%d" name total_size alloc_size >::
+       test ~ring ~total_size ~alloc_size
+    )   
 
 (* Allocate a single value and release it repeatedly, checking
  * that allocation never fails *)
 let allocate_release_test =
   let total_sizes = [4096; 8192; 16384] in
   let alloc_sizes = [1;2;3;7;8;128;256;1024;1025] in
-  with_alloc_pattern "allocate_release" ~total_sizes ~alloc_sizes
+  test_with_alloc_pattern "allocate_release" ~total_sizes ~alloc_sizes
     (fun ~ring ~total_size ~alloc_size () ->
       for i = 0 to 100000 do
         match Simplex.alloc ring alloc_size with
@@ -68,7 +74,7 @@ let allocate_release_test =
 let alloc_until_full =
   let total_sizes = [4096; 8192; 32768] in
   let alloc_sizes = [ 128; 256; 512; 4096 ] in
-  with_alloc_pattern "allocate_until_full" ~total_sizes ~alloc_sizes
+  test_with_alloc_pattern "allocate_until_full" ~total_sizes ~alloc_sizes
     (fun ~ring ~total_size ~alloc_size () ->
       let rec fill_tx acc =
         (* allocate until we get a short alloc or a failure *)
@@ -84,13 +90,53 @@ let alloc_until_full =
       assert_bool "ring is full" (not (Simplex.has_free_space ring))
     )
 
+(* Allocate several rings and make sure that the native/foreign
+ * membership tests works (including between GCs *)
+let test_membership =
+  let total_sizes = [ 4096; 8192; 32768 ] in
+  let alloc_sizes = [ 128; 256; 512; 1024 ] in
+  let a_ring = Simplex.attach_tx (Shm.open_anonymous ()) 8192 in
+  (* Test that extent membership tests work *)
+  let test_extents =
+    test_with_alloc_pattern "test_extents" ~total_sizes ~alloc_sizes
+      (fun ~ring ~total_size ~alloc_size () ->
+         Gc.compact ();
+         let extents = List.map (fun _ ->
+           match Simplex.alloc ring alloc_size with
+           |None -> assert_failure "alloc failed"
+           |Some ext -> ext
+         ) [1;2;3;4] in
+         List.iter (fun extent ->
+            assert_bool "is_member" (Simplex.extent_is_member ring extent);
+            assert_bool "isnt_member" (not (Simplex.extent_is_member a_ring extent));
+         ) extents
+      ) in
+  (* Test that bigarray membership tests work *)
+  let test_bufs =
+     test_with_alloc_pattern "test_bigarrays" ~total_sizes ~alloc_sizes
+      (fun ~ring ~total_size ~alloc_size () ->
+         Gc.compact ();
+         let bufs = List.map (fun _ ->
+           match Simplex.alloc ring alloc_size with
+           |None -> assert_failure "alloc failed"
+           |Some extent -> Simplex.buffer extent
+         ) [1;2;3;4] in
+         List.iter (fun buf ->
+           assert_bool "is_member" (Simplex.buf_is_member ring buf);
+           assert_bool "isnt_member" (not (Simplex.buf_is_member a_ring buf));
+         ) bufs
+      ) in
+  test_extents @ test_bufs
+
 let _ =
-  let suite = "Simplex" >::: allocate_release_test in
+  let suite = "Simplex" >::: (allocate_release_test @ test_membership) in
   let verbose = ref false in
   let set_verbose _ = verbose := true in
   Arg.parse
     [("-verbose", Arg.Unit set_verbose, "Run the test in verbose mode.");]
     (fun x -> raise (Arg.Bad ("Bad argument : " ^ x)))
     ("Usage: " ^ Sys.argv.(0) ^ " [-verbose]");
-  if not (was_successful (run_test_tt ~verbose:!verbose suite)) then
-  exit 1
+  try if not (was_successful (run_test_tt ~verbose:!verbose suite)) then exit 1
+  with Unix.Unix_error (e,_,_) as exn ->
+    eprintf "Unix_error %s: %s\n%!" (Unix.error_message e) (Printexc.to_string exn);
+    raise exn
