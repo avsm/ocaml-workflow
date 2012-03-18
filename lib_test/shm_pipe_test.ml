@@ -28,7 +28,7 @@ let listen_t () =
     for_lwt i = 0 to 10000 do
       let data = sprintf "%d*\n%!" i in
       lwt ext = tx_alloc (String.length data) in
-      let buf = Simplex.buffer (h.Shm_pipe.tx) ext in
+      let buf = Simplex.buffer ext in
       Lwt_bytes.blit_string_bytes data 0 buf 0 (String.length data);
       tx_send ext;
       return ()
@@ -44,7 +44,7 @@ let connect_t () =
   let rx, tx_send, tx_release, tx_close, tx_alloc = Shm_pipe.streams_of_handle ch in
   let t = Lwt_stream.iter_s
     (fun ext ->
-      let buf = Simplex.buffer (ch.Shm_pipe.rx) ext in
+      let buf = Simplex.buffer ext in
       dprintf "recv: %S\n%!" (Lwt_bytes.to_string buf);
       tx_release ext;
       return ()
