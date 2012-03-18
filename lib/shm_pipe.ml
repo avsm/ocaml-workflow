@@ -28,10 +28,6 @@ type handle = {
   rx: [`rx] Simplex.ring;
 }
 
-type 'a metadata =
-  |Free of 'a Simplex.extent (* Free an extent with the sender *)
-  |Send of 'a Simplex.extent (* Send a new extent to the receiver *)
-
 let dprintf fmt =
   let xfn ch = fprintf ch fmt in
   kfprintf xfn stderr "[%d] " (Unix.getpid())
@@ -47,8 +43,6 @@ let streams_of_handle handle =
   let tx_waiters = Lwt_sequence.create () in
   (* Buffered sequence of receive segments *)
   let rx_q = Lwt_sequence.create () in
-  (* Buffered sequence of transmit segments *)
-  let tx_q = Lwt_sequence.create () in
   (* Receive stream handler *)
   let rx_stream = Lwt_stream.from
     (fun () ->
@@ -86,36 +80,41 @@ let streams_of_handle handle =
   (* Transmit stream handler *)
   let tx_stream, tx_push = Lwt_stream.create () in
   let tx_t =
-    Lwt_stream.iter_s (fun (data : 'a metadata) ->
-       Lwt_io.write_value oc data
+    Lwt_stream.iter_s (fun (data : Simplex.op) ->
+      Lwt_io.write_value oc data
     ) tx_stream
   in
   (* Wrapper functions to push the correct metadata *)
-  let tx_send extent = tx_push (Some (Send extent)) in
-  let tx_release extent = tx_push (Some (Free extent)) in
+  let tx_send extent = tx_push (Some (Simplex.to_send_op extent)) in
+  let tx_release extent = tx_push (Some (Simplex.to_free_op extent)) in
   let tx_close () = tx_push None in
   let d = ref 0 in
   (* The metadata pipe coordinates all this *)
   let metadata_t =
     (* Create a buffered pipe *)
     while_lwt true do
-      match_lwt Lwt_io.read_value ic with
-      |Free extent -> begin
-        (* This frees the extent on our sender ring *)
-        Simplex.release extent;
-        match Lwt_sequence.take_opt_l tx_waiters with
-        |None -> return ()
-        |Some u -> Lwt.wakeup u (); return () (* Wake up the waiter *)
-      end   
-      |Send extent -> begin (* Create an extent on our receiver ring *)
-        match Lwt_sequence.take_opt_l rx_waiters with
-        |None -> let _ = Lwt_sequence.add_r extent rx_q in return ()
-        |Some u -> Lwt.wakeup u (Some extent); return ()
-      end
+      Lwt_io.read_value ic >|= Simplex.on_op ~rx:handle.rx ~tx:handle.tx
+        ~send:(fun extent -> (* received a Send *)
+           match Lwt_sequence.take_opt_l rx_waiters with
+           |None -> ignore(Lwt_sequence.add_r extent rx_q)
+           |Some u -> Lwt.wakeup u (Some extent))
+        ~free:(fun extent -> (* received a Free *)
+           Simplex.release extent;
+           match Lwt_sequence.take_opt_l tx_waiters with
+           |None -> ()
+           |Some u -> Lwt.wakeup u ()) 
     done
   in
   let stream_t = tx_t <&> metadata_t in
   rx_stream, tx_send, tx_release, tx_close, tx_alloc
+
+(*
+let make_io_channels h =
+  let ic = Lwt_io.make
+    ~close:(fun () -> dprintf "ic close\n%!"; return ())
+    ~mode:Lwt_io.input
+    (fun buf
+*)
 
 (* A connect consists of a single handshake "packet" that
  * contains data with handshake information, and two file
@@ -148,14 +147,6 @@ let make_send_ivs v =
   let length = String.length buffer in
   [Lwt_unix.io_vector ~buffer ~offset:0 ~length]
   
-(* Allocate a shared memory fd of a given length *)
-let alloc_shm len =
-  let shmfd = Shm.open_anonymous () in
-  let fd = Shm.unix_descr_of_shm shmfd in
-  let ufd = Lwt_unix.of_unix_file_descr ~blocking:false ~set_flags:false fd in
-  lwt () = Lwt_unix.ftruncate ufd len in
-  return shmfd
-
 (* A listening service sits on a well-known named socket and
  * waits for requests for a new duplex channel to come over it *)
 let listen ~name fn =
@@ -175,7 +166,7 @@ let listen ~name fn =
     (* Attach the receive end of the metadata ring *)
     let send_ring_rx = Simplex.attach_rx shm client_h.hc_tx_len in
     (* Allocate a transmit ring for our side *)
-    lwt recv_fd = alloc_shm recv_buf in
+    let recv_fd = Shm.open_anonymous () in
     let recv_ring_tx = Simplex.attach_tx recv_fd recv_buf in
     (* Respond with the server handshake over the metadata socket *)
     let server_h = { hs_name=client_h.hc_name; hc_rx_len=recv_buf } in
@@ -199,7 +190,7 @@ let connect ~name () =
   lwt () = Lwt_unix.connect fd sockaddr in
   (* make an shm fd *)
   let hc_name = "conn_name" in
-  lwt shmfd = alloc_shm nr_bytes in
+  let shmfd = Shm.open_anonymous () in
   let send_ring_tx = Simplex.attach_tx shmfd nr_bytes in
   (* allocate a socket pair for metadata *)
   let md1, md2 = Lwt_unix.(socketpair PF_UNIX SOCK_STREAM 0) in
