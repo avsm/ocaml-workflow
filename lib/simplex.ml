@@ -42,9 +42,11 @@ type 'a extent = 'a ring * Raw.extent
 type buf = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
 
 let attach_tx fd nr_bytes  =
+  Unix.ftruncate (Shm.unix_descr_of_shm fd) nr_bytes;
   Raw.attach fd Raw.Send nr_bytes
 
 let attach_rx fd nr_bytes  =
+  Unix.ftruncate (Shm.unix_descr_of_shm fd) nr_bytes;
   Raw.attach fd Raw.Recv nr_bytes
 
 let has_free_space ring =
