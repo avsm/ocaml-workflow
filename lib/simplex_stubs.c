@@ -490,12 +490,16 @@ release_shared_space(struct shmem_simplex *sp, unsigned start, unsigned size)
 #include <caml/alloc.h>
 #include <caml/memory.h>
 #include <caml/bigarray.h>
+#include <caml/fail.h>
+#include <caml/unixsupport.h>
 
 static void
 shmem_simplex_init(struct shmem_simplex *sh, int shmem_fd, int mode, size_t nr_bytes)
 {
   int seg_pages = nr_bytes / PAGE_SIZE; /* TODO assert page aligned */
   sh->ring = mmap(NULL, PAGE_SIZE * seg_pages, PROT_READ|PROT_WRITE, MAP_SHARED, shmem_fd, 0);
+  if (sh->ring == MAP_FAILED)
+    uerror("simplex_init", Val_unit);
   sh->ring_pages = seg_pages;
   sh->simpl_id.is_send = mode;
   if (mode==0) { /* RECV */
