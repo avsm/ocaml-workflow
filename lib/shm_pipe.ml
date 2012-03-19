@@ -108,14 +108,6 @@ let streams_of_handle handle =
   let stream_t = tx_t <&> metadata_t in
   rx_stream, tx_send, tx_release, tx_close, tx_alloc
 
-(*
-let make_io_channels h =
-  let ic = Lwt_io.make
-    ~close:(fun () -> dprintf "ic close\n%!"; return ())
-    ~mode:Lwt_io.input
-    (fun buf
-*)
-
 (* A connect consists of a single handshake "packet" that
  * contains data with handshake information, and two file
  * descriptors: the first is a metadata pipe, and the second
