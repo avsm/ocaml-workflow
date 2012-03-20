@@ -13,6 +13,8 @@ Library workflow
   Modules: Shm,Simplex,Shm_pipe
   BuildDepends:	lwt.syntax, lwt, lwt.unix, ocamlgraph
   CSources: shmem_stubs.c,simplex_stubs.c
+  if system(linux)
+    CCLib+: -lrt
 
 Flag tests
   Description:        Build tests
