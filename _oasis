@@ -10,8 +10,8 @@ BuildTools:  ocamlbuild
 Library workflow
   Path:       lib
   Findlibname: workflow
-  Modules: Shm,Simplex,Shm_pipe
-  BuildDepends:	lwt.syntax, lwt, lwt.unix, ocamlgraph
+  Modules: Shm,Simplex,Shm_pipe,Lwt_rpc,Lwt_rpc_unix,Lwt_ounit_unix
+  BuildDepends:	lwt.syntax, lwt, lwt.unix, ocamlgraph, unix, oUnit
   CSources: shmem_stubs.c,simplex_stubs.c
   if system(linux)
     CCLib+: -lrt
@@ -36,7 +36,20 @@ Executable simplex_test
   Install:            false
   BuildDepends:       workflow,lwt,lwt.unix,oUnit
 
+Executable unix_rpc_test
+  Path:               lib_test
+  MainIs:             unix_rpc_test.ml
+  Custom:             true
+  CompiledObject:     best
+  Install:            false
+  BuildDepends:       workflow,lwt,lwt.unix,oUnit
+
 Test simplex_test
   Run$:               flag(tests)
   Command:            $simplex_test
+  WorkingDirectory:   lib_test
+
+Test unix_rpc_test
+  Run$:               flag(tests)
+  Command:            $unix_rpc_test
   WorkingDirectory:   lib_test

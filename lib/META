@@ -1,8 +1,8 @@
 # OASIS_START
-# DO NOT EDIT (digest: 6fd51fef031448fd41d2de8455065949)
+# DO NOT EDIT (digest: 3aefaf241cc5ffc4421e0987c2fdbd22)
 version = "0.1-wip"
 description = "Persistent workflow engine for parallel computation"
-requires = "lwt.syntax lwt lwt.unix ocamlgraph"
+requires = "lwt.syntax lwt lwt.unix ocamlgraph unix oUnit"
 archive(byte) = "workflow.cma"
 archive(native) = "workflow.cmxa"
 exists_if = "workflow.cma"

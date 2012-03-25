@@ -154,8 +154,8 @@ let listen ~name fn =
      match fds with
      |[md;shm] -> (Lwt_unix.of_unix_file_descr ~blocking:false ~set_flags:true md), (Shm.shm_of_unix_descr shm) 
      |_ -> assert false 
-    in
-    (* Attach the receive end of the metadata ring *)
+	in
+(* Attach the receive end of the metadata ring *)
     let send_ring_rx = Simplex.attach_rx shm client_h.hc_tx_len in
     (* Allocate a transmit ring for our side *)
     let recv_fd = Shm.open_anonymous () in

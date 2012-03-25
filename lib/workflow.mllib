@@ -1,6 +1,9 @@
 # OASIS_START
-# DO NOT EDIT (digest: 44288ada3425879a8329bf36b8de5dbb)
+# DO NOT EDIT (digest: 7454db806789e5b700fd03827b18608d)
 Shm
 Simplex
 Shm_pipe
+Lwt_rpc
+Lwt_rpc_unix
+Lwt_ounit_unix
 # OASIS_STOP
