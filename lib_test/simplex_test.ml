@@ -20,19 +20,6 @@
 open OUnit
 open Printf
 
-(* Returns true if the result list contains successes only.
-   Copied from oUnit source as it isnt exposed by the mli *)
-let rec was_successful =
-  function
-    | [] -> true
-    | RSuccess _::t
-    | RSkip _::t ->
-        was_successful t
-    | RFailure _::_
-    | RError _::_
-    | RTodo _::_ ->
-        false
-
 (* Given a set of ring sizes and allocation sizes to do within
  * the ring, run all combinations with the test function *)
 let with_alloc_pattern name ~total_sizes ~alloc_sizes test =
@@ -128,15 +115,6 @@ let test_membership =
       ) in
   test_extents @ test_bufs
 
-let _ =
-  let suite = "Simplex" >::: (allocate_release_test @ test_membership) in
-  let verbose = ref false in
-  let set_verbose _ = verbose := true in
-  Arg.parse
-    [("-verbose", Arg.Unit set_verbose, "Run the test in verbose mode.");]
-    (fun x -> raise (Arg.Bad ("Bad argument : " ^ x)))
-    ("Usage: " ^ Sys.argv.(0) ^ " [-verbose]");
-  try if not (was_successful (run_test_tt ~verbose:!verbose suite)) then exit 1
-  with Unix.Unix_error (e,_,_) as exn ->
-    eprintf "Unix_error %s: %s\n%!" (Unix.error_message e) (Printexc.to_string exn);
-    raise exn
+let _ = 
+  let tests = allocate_release_test @ test_membership in
+  Lwt_ounit.main ~suite_name:"simplex_test" ~tests
