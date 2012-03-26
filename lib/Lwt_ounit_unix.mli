@@ -15,14 +15,14 @@
  *)
 
 (** An Lwt test function *)
-type testfn = string -> unit Lwt.t
+type test_fun = string -> unit Lwt.t
 
 (* An Lwt test function that also accepts a file descriptor *)
-type testfn_fd = Lwt_unix.file_descr -> testfn
+type test_fun_fd = Lwt_unix.file_descr -> test_fun
 
 (* A client/server function pair (client first, server second *)
-type cs = testfn * testfn
-type cs_fd = testfn_fd * testfn_fd
+type cs = test_fun * test_fun
+type cs_fd = test_fun_fd * test_fun_fd
 
 (* Run a client/server test, by forking two independent processes
  * and waiting for them to terminate. Each process will start a 

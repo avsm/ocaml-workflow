@@ -41,10 +41,10 @@ let rec test_waitpid ~name pid =
   with Unix.Unix_error(Unix.EINTR,_,_) ->
     test_waitpid ~name pid
 
-type testfn = string -> unit Lwt.t
-type testfn_fd = Lwt_unix.file_descr -> testfn
-type cs = testfn * testfn
-type cs_fd = testfn_fd * testfn_fd
+type test_fun = string -> unit Lwt.t
+type test_fun_fd = Lwt_unix.file_descr -> test_fun
+type cs = test_fun * test_fun
+type cs_fd = test_fun_fd * test_fun_fd
 
 (* Fork two processes, which will call the clientfn and serverfn
  * as Lwt threads, with a short delay for the client (to give the 
