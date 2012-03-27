@@ -17,11 +17,12 @@
 (* Helper utilities to make oUnit/Lwt testing easier *)
 open OUnit
 open Printf
+open Lwt
 
-(* Run an Lwt main loop and terminate right after *)
+(* Run an Lwt main loop and return the value from the thread *)
 let lwt_run fn a =
   try
-    Lwt_main.run (fn a);
+    let _ = Lwt_main.run (fn a) in
     exit 0
   with
     |Unix.Unix_error (e,_,_) as exn ->
@@ -31,70 +32,141 @@ let lwt_run fn a =
       eprintf "%d: %s\n%!" (Unix.getpid()) (Printexc.to_string exn);
       exit (-1)
   
-(* Wait for a child process to terminate, and fail the test if
- * it is an abnormal exit code *)
-let rec test_waitpid ~name pid =
-  try
-    match Unix.waitpid [] pid with
-    |_, Unix.WEXITED st when st = 0 -> ()
-    |_,_ -> assert_failure (name^": child process unclean exit")
-  with Unix.Unix_error(Unix.EINTR,_,_) ->
-    test_waitpid ~name pid
+(* Wait for a set of child processes to terminate, and fail the test if
+ * any had an abnormal exit code *)
+let rec test_waitpid acc =
+  function
+  |[] -> "child processes" @? acc
+  |pid::tl as pids -> begin
+    try
+      match Unix.waitpid [] pid with
+      |_, Unix.WEXITED st when st = 0 ->
+        test_waitpid acc tl
+      |_,_ ->
+        test_waitpid false tl
+    with Unix.Unix_error(Unix.EINTR,_,_) ->
+      test_waitpid acc pids
+   end
 
-type test_fun = string -> unit Lwt.t
-type test_fun_fd = Lwt_unix.file_descr -> test_fun
-type cs = test_fun * test_fun
-type cs_fd = test_fun_fd * test_fun_fd
+(* Lwt version of the test function that blocks *)
+type test_fun = unit -> unit Lwt.t
 
-(* Fork two processes, which will call the clientfn and serverfn
- * as Lwt threads, with a short delay for the client (to give the 
- * server time to set itself up.
- * The test will wait for both processes to terminate and succeed
- * or fail based on their error codes both being normal.
+(* Lwt bracket that can do test setup, execute the function, and cleanup *)
+type ('a,'b,'c) bracket_fun = {
+  set_up: 'a -> 'b Lwt.t;
+  test_fun: 'b -> 'c Lwt.t;
+  tear_down: 'b -> unit Lwt.t;
+}
+
+(* Lwt version of the oUnit bracket, with an initial argument to pass to
+ * the setup function (unlike oUnit which just takes a unit to set_up *)
+let bracket_s br v =
+  lwt a = br.set_up v in
+  try_lwt
+    lwt x = br.test_fun a in
+    br.tear_down a >> 
+    return x
+  with exn ->
+    lwt r = br.tear_down a in
+    fail exn
+
+let bracket1 set_up test_fun tear_down =
+  { set_up; test_fun; tear_down }
+  
+(* Map an Lwt bracket [br] with a set_up/tear_down function that happens
+ * before and after in [br] set_up/tear_down functions. *)
+let bracket_map set_up testfn br tear_down =
+  bracket1 set_up (fun v -> testfn v >>= bracket_s br) tear_down
+
+let bracket_bind br1 br2 =
+  bracket1 br1.set_up (fun v -> br1.test_fun v >>= bracket_s br2) br1.tear_down
+
+(* Process set that operate in parallel in independent processes, with their
+ * own Lwt_main loops *)
+type ('a,'b,'c) procset = ('a,'b,'c) bracket_fun list
+
+(* Fork a procset as a parallel set of processes, each with their own
+ * bracket functions. Wrap the bracket functions to exit from the child
+ * processes.  The test will wait for both processes to terminate and
+ * set error codes based on return values.
  *)
-let run_client_server name (clientfn, serverfn) () =
-  match Unix.fork () with
-  |0 -> (* child, server *)
-    lwt_run serverfn name
-  |pid_server -> begin (* parent *)
-    Unix.sleep 1;
-    match Unix.fork () with
-    |0 -> (* child2, client *)
-      lwt_run clientfn name
-    |pid_client -> begin (* parent, test runner *)
-      (* Wait for both children to terminate *)
-      test_waitpid ~name pid_client;
-      test_waitpid ~name pid_server;
+let bracket_p procset v () =
+  (* TODO: add a logger here that could capture the process output *)
+  let rec fork_all acc =
+    function
+    |br::tl -> begin
+      match Lwt_unix.fork () with
+      |0 -> begin (* child *)
+        try lwt_run (bracket_s br) v
+        with exn -> exit 1
+      end
+      |pid -> fork_all (pid::acc) tl
     end
-  end
+    |[] -> List.rev acc
+  in      
+  let pids = fork_all [] procset in
+  test_waitpid true pids
 
-(* Bracket a client/server function pair with a domain socket
- * that they can communicate between. The server listens, and so
- * the test case should start with an accept, and the client
- * just does a single connect.
+(* Procset with a special first one that acts as a server, and the
+ * rest are clients *)
+type ('a,'b,'c) procset_server = {
+  server: ('a,'b,'c) bracket_fun;
+  clients: ('a,'b,'c) procset;
+}
+
+(* Turn a server procset into a normal procset that can be run by bracket_p *)
+let procset_of_server ps = ps.server :: ps.clients
+
+(* Bracket a procset_server with a domain socket pair
+ * that they can communicate to the clients with. The server listens and
+ * the server testfun should start with an accept, and the clients all
+ * can connect immediately via their fd.
  *)
-let with_domain_socket ?(ty=Lwt_unix.SOCK_STREAM) name (cfn, sfn) = 
+type sockinfo = {
+  sockaddr: Lwt_unix.sockaddr;
+  fd: Lwt_unix.file_descr;
+}
+
+let bracket_domain_socket ~ty ps_cs =
   (* Generate a random sockpath, and do not use tempfile, as 
    * that may be a no-exec mount point *) 
   let open Lwt_unix in
-  let sockpath = sprintf "test_%s.%d.sock" name (Random.int 60000) in
-  let sockaddr = ADDR_UNIX sockpath in
-  (try Unix.unlink sockpath with _ -> ());
-  let listen_t name =
-    let fd = socket PF_UNIX SOCK_STREAM 0 in
-    bind fd sockaddr;
-    listen fd 5;
-    try_lwt sfn fd name
+  let set_up sockpath = 
+    let sockaddr = ADDR_UNIX sockpath in
+    let fd = socket PF_UNIX ty 0 in
+    return {sockaddr; fd}
   in
-  let connect_t name =
-    let fd = socket PF_UNIX SOCK_STREAM 0 in
-    lwt () = connect fd sockaddr in
-    try_lwt cfn fd name
-  (*    finally close fd *)
+  let listen_t {sockaddr; fd} =
+    bind fd sockaddr;
+    return fd
+  in
+  let connect_t {sockaddr; fd} =
+    let rec retry =
+      function
+      |100 -> assert_failure "connect"
+      |n -> begin
+        Lwt_unix.sleep 0.1 >>
+        try_lwt 
+          lwt () = connect fd sockaddr in
+          return fd
+        with Unix.Unix_error(Unix.ECONNREFUSED,_,_) ->
+          retry (n+1)
+      end
+    in retry 0
+  in
+  let tear_down {sockaddr; fd} =
+    match sockaddr with
+    |ADDR_UNIX sockpath ->
+      (try Unix.unlink sockpath with _ -> ());
+      return ()
+    |_ -> return ()
+  (*    close fd *)
   (* XXX The above blocks on MacOS X. This is possibly due to the
    * async job invocation that Lwt_unix.close uses. Why not just call
    * close(2) directly?  NFS biowait blocking perhaps. Needs investigation *)
   in
-  connect_t, listen_t
+  let server = bracket_map set_up listen_t ps_cs.server tear_down in
+  let clients = List.map (fun c -> bracket_map set_up connect_t c (fun _ -> return ())) ps_cs.clients in
+  { server; clients }
 
 (* TODO remove temporary sockets by making this a bracket *)

@@ -17,6 +17,7 @@
 open Lwt
 open Printf
 open OUnit
+open Lwt_ounit_unix
 
 let dprintf fmt =
   let xfn ch = fprintf ch fmt in
@@ -40,12 +41,13 @@ let dres req res =
   |Bar x, RBar x' -> "dres bar eq" @? (("XXX"^x) = x')
   |_ -> assert_failure "dreq != dres"
 
-let listen_t iters fd name =
+let listen_t iters fd =
+  Lwt_unix.listen fd 5;
   lwt fd, sa = Lwt_unix.accept fd in
   let chan = Lwt_rpc_unix.Unix_transport.make fd in
   let n = ref 0 in
   let th,u = Lwt.task () in
-  let rpc = Lwt_rpc_unix.RPC.Server.server chan 
+  let _ = Lwt_rpc_unix.RPC.Server.server chan 
     (fun metadata req ->
        let res =
          match req with
@@ -60,7 +62,7 @@ let listen_t iters fd name =
   in
   th
 
-let connect_t iters fd name =
+let connect_t iters fd =
   let chan = Lwt_rpc_unix.Unix_transport.make fd in
   let rpc = Lwt_rpc_unix.RPC.Client.client chan in
   for_lwt i = 0 to iters do
@@ -73,20 +75,23 @@ let connect_t iters fd name =
 
 let rpc_ping =
   let open Lwt_ounit_unix in
-  let iters = 100 in
-  let cs_fd = (connect_t iters, listen_t iters) in
+  let iters = 10 in
+  let server = bracket1 (return) (listen_t iters) (fun fd -> return ()) in
+  let client = bracket1 (return) (connect_t iters) (fun fd -> return ()) in
+  let clients = [ client ] in
+  let cs = { server; clients } in
   List.map (fun ty ->
-    let cs = with_domain_socket ~ty "rpc_ping" cs_fd in
     let test_name = sprintf "rpc_ping_%s"
       (match ty with
        |Lwt_unix.SOCK_STREAM -> "stream"
        |Lwt_unix.SOCK_DGRAM -> "dgram"
        |_ -> "???")
     in
-    test_name >:: Lwt_ounit_unix.run_client_server test_name cs
-  ) [Lwt_unix.SOCK_DGRAM; Lwt_unix.SOCK_STREAM]
+    let sockpath = sprintf "test_%s.%d.sock" test_name (Random.int 10000) in
+    let csfd = procset_of_server (bracket_domain_socket ~ty cs) in
+    test_name >:: Lwt_ounit_unix.bracket_p csfd sockpath
+  ) [Lwt_unix.SOCK_STREAM; Lwt_unix.SOCK_STREAM]
 
 let _ =
   let tests = rpc_ping in
-  Lwt_ounit.main ~suite_name:"unix_rpc_test" ~tests;
-  eprintf "DONE\n%!"
+  Lwt_ounit.main ~suite_name:"unix_rpc_test" ~tests
