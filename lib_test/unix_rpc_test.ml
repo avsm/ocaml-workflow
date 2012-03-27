@@ -76,8 +76,8 @@ let connect_t iters fd =
 let rpc_ping =
   let open Lwt_ounit_unix in
   let iters = 10 in
-  let server = bracket1 (return) (listen_t iters) (fun fd -> return ()) in
-  let client = bracket1 (return) (connect_t iters) (fun fd -> return ()) in
+  let server = Bracket.return ~set_up:(return) (listen_t iters) in
+  let client = Bracket.return ~set_up:(return) (connect_t iters) in
   let clients = [ client ] in
   let cs = { server; clients } in
   List.map (fun ty ->
@@ -87,9 +87,11 @@ let rpc_ping =
        |Lwt_unix.SOCK_DGRAM -> "dgram"
        |_ -> "???")
     in
+    (* Generate a random sockpath, and do not use tempfile, as 
+     * that may be a no-exec mount point *) 
     let sockpath = sprintf "test_%s.%d.sock" test_name (Random.int 10000) in
     let csfd = procset_of_server (bracket_domain_socket ~ty cs) in
-    test_name >:: Lwt_ounit_unix.bracket_p csfd sockpath
+    test_name >:: Bracket.apply_p csfd sockpath
   ) [Lwt_unix.SOCK_STREAM; Lwt_unix.SOCK_STREAM]
 
 let _ =

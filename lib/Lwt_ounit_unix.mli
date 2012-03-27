@@ -14,28 +14,31 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
-(** An Lwt test function *)
-type test_fun = string -> unit Lwt.t
+module Bracket : sig
+  type ('a, 'b, 'c) t
 
-(* An Lwt test function that also accepts a file descriptor *)
-type test_fun_fd = Lwt_unix.file_descr -> test_fun
+  val return : set_up:('a -> 'b Lwt.t) -> ?tear_down:('b -> unit Lwt.t) ->
+      ('b -> 'c Lwt.t) -> ('a, 'b, 'c) t
 
-(* A client/server function pair (client first, server second *)
-type cs = test_fun * test_fun
-type cs_fd = test_fun_fd * test_fun_fd
+  val bind : ('a, 'b, 'c) t -> ('c, 'd, 'e) t -> ('a, 'b, 'e) t
 
-(* Run a client/server test, by forking two independent processes
- * and waiting for them to terminate. Each process will start a 
- * fresh Lwt_main within its sub-process and invoke the relevant
- * test function from the [cs] pair, and terminate immediately
- * after the Lwt_main finishes.
- *)
-val run_client_server : string -> cs -> unit -> unit
+  val apply : ('a, 'b, 'c) t -> 'a -> 'c Lwt.t
+  val apply_p : ('a, 'b, 'c) t list -> 'a -> unit -> unit
+end
 
-(* Brackets a [cs] invocation with a common domain socket they can
- * communicate over, and returns the [cs] pair which can be executed
- * by the test runner. The client will wait for a short amount of time
- * to before connecting to the server, which will pass a listen fd to
- * its server test function.
- *)
-val with_domain_socket : ?ty:Lwt_unix.socket_type -> string -> cs_fd -> cs
+type ('a, 'b, 'c) procset_server = {
+  server : ('a, 'b, 'c) Bracket.t;
+  clients : ('a, 'b, 'c) Bracket.t list;
+}
+
+val procset_of_server : ('a, 'b, 'c) procset_server -> ('a, 'b, 'c) Bracket.t list
+
+type sockinfo ={
+  sockaddr : Lwt_unix.sockaddr; 
+  fd : Lwt_unix.file_descr; 
+}
+
+val bracket_domain_socket :
+  ?ty:Lwt_unix.socket_type ->
+  (Lwt_unix.file_descr, 'a, 'b) procset_server ->
+  (string, sockinfo, 'b) procset_server
