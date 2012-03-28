@@ -156,22 +156,22 @@ let bracket_domain_socket ?(ty=Lwt_unix.SOCK_STREAM) cs =
         try_lwt 
           lwt () = connect fd sockaddr in
           return fd
-        with Unix.Unix_error(Unix.ECONNREFUSED,_,_) ->
+        with Unix.Unix_error((Unix.ECONNREFUSED|Unix.ENOENT),_,_) ->
           retry (n+1)
       end
     in retry 0
   in
   (* Tear down is only for the server *)
   let tear_down {sockaddr; fd} =
+  (* XXX The below close blocks on MacOS X if done as Lwt_unix.close.
+   * This is possibly due to the * async job invocation . Why not just call
+   * close(2) directly?  NFS biowait blocking perhaps. Needs investigation *)
+    Unix.close (Lwt_unix.unix_file_descr fd);
     match sockaddr with
     |ADDR_UNIX sockpath ->
       (try Unix.unlink sockpath with _ -> ());
       return ()
     |_ -> return ()
-  (*    close fd *)
-  (* XXX The above blocks on MacOS X. This is possibly due to the
-   * async job invocation that Lwt_unix.close uses. Why not just call
-   * close(2) directly?  NFS biowait blocking perhaps. Needs investigation *)
   in
   let server = Bracket.(return ~set_up ~tear_down listen_t >>= cs.server) in
   let clients = List.map (fun c -> Bracket.(return ~set_up ~tear_down connect_t >>= c)) cs.clients in
