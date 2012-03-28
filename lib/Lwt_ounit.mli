@@ -19,3 +19,8 @@
   * the verbose option.
   *)
 val main : suite_name:string -> tests:OUnit.test list -> unit
+
+(** Given a label and a test function, return a set of tests each
+ * with a unique label number appended, so the test runs [iter] times *)
+val test_iter : string -> OUnit.test_fun -> int -> OUnit.test list
+val (>::=) : string -> OUnit.test_fun -> int -> OUnit.test list

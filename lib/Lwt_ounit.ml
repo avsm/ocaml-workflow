@@ -30,6 +30,20 @@ let rec was_successful =
     | RTodo _::_ ->
         false
 
+(* Convert a test into multiple iterations, each of which
+ * has a unique TestLabel *)
+let test_iter label test_fun =
+  let rec fn acc =
+    function
+    |0 -> acc
+    |n -> 
+      let test = TestLabel (sprintf "%s:%d" label n, TestCase test_fun) in
+      fn (test::acc) (n-1)
+  in fn [] 
+
+let (>::=) = test_iter
+    
+(* Main loop to invoke a suite of tests *)
 let main ~suite_name ~tests =
   let suite = suite_name >::: tests in
   let verbose = ref false in
