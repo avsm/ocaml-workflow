@@ -14,31 +14,42 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
-module Bracket : sig
-  type ('a, 'b, 'c) t
-
-  val return : set_up:('a -> 'b Lwt.t) -> ?tear_down:('b -> unit Lwt.t) ->
-      ('b -> 'c Lwt.t) -> ('a, 'b, 'c) t
-
-  val bind : ('a, 'b, 'c) t -> ('c, 'd, 'e) t -> ('a, 'b, 'e) t
-
-  val apply : ('a, 'b, 'c) t -> 'a -> 'c Lwt.t
-  val apply_p : ('a, 'b, 'c) t list -> 'a -> unit -> unit
-end
-
-type ('a, 'b, 'c) procset_server = {
-  server : ('a, 'b, 'c) Bracket.t;
-  clients : ('a, 'b, 'c) Bracket.t list;
+type perf_ctr = {
+  execution_time: float;
+  pre_gc: Gc.stat;
+  post_gc: Gc.stat;
 }
 
-val procset_of_server : ('a, 'b, 'c) procset_server -> ('a, 'b, 'c) Bracket.t list
+val with_perf_ctrs : ('a -> 'b Lwt.t) -> 'a -> ('b * perf_ctr) Lwt.t
 
-type sockinfo ={
+module Bracket : sig
+  type ('a, 'b) t
+
+  val return : set_up:('a -> 'b Lwt.t) -> ?tear_down:('b -> unit Lwt.t) ->
+      ?test_fun:('b -> unit Lwt.t) -> unit -> ('a, 'b) t
+
+  val bind : ('a, 'b) t -> ('b, 'c) t -> ('a, ('b * 'c)) t
+
+  val apply : ('a, 'b) t -> 'a -> unit Lwt.t
+
+  val apply_p : ('a, 'b) t list -> 'a -> unit -> unit
+
+  (* Apply a bracket multiple times and record the performance results
+   * for each iteration. *)
+  val apply_n : ('a, 'b) t -> 'a -> int -> perf_ctr list Lwt.t
+end
+
+type sockinfo = {
   sockaddr : Lwt_unix.sockaddr; 
   fd : Lwt_unix.file_descr; 
 }
 
-val bracket_domain_socket :
-  ?ty:Lwt_unix.socket_type ->
-  (Lwt_unix.file_descr, 'a, 'b) procset_server ->
-  (string, sockinfo, 'b) procset_server
+val with_server_socket : ?ty:Lwt_unix.socket_type -> (sockinfo, 'a) Bracket.t -> (string, sockinfo * 'a) Bracket.t
+val with_client_socket : ?ty:Lwt_unix.socket_type -> (sockinfo, 'a) Bracket.t -> (string, sockinfo * 'a) Bracket.t
+
+type ('a, 'b) procset = {
+  server : ('a, 'b) Bracket.t;
+  clients : ('a, 'b) Bracket.t list;
+}
+
+val test_procset_p: ?ty:Lwt_unix.socket_type -> (sockinfo, 'a) procset -> string -> unit -> unit

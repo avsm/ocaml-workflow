@@ -42,7 +42,7 @@ let dres req res =
   |Bar x, RBar x' -> "dres bar eq" @? (("XXX"^x) = x')
   |_ -> assert_failure "dreq != dres"
 
-let listen_t iters fd =
+let listen_t iters {fd} =
   Lwt_unix.listen fd 5;
   lwt fd, sa = Lwt_unix.accept fd in
   let chan = Lwt_rpc_unix.Unix_transport.make fd in
@@ -63,7 +63,7 @@ let listen_t iters fd =
   in
   th
 
-let connect_t iters fd =
+let connect_t iters {fd} =
   let chan = Lwt_rpc_unix.Unix_transport.make fd in
   let rpc = Lwt_rpc_unix.RPC.Client.client chan in
   for_lwt i = 0 to iters do
@@ -76,15 +76,14 @@ let connect_t iters fd =
 
 let rpc_ping ~rpc_iters =
   let open Lwt_ounit_unix in
-  let server = Bracket.return ~set_up:(return) (listen_t rpc_iters) in
-  let client = Bracket.return ~set_up:(return) (connect_t rpc_iters) in
+  let server = Bracket.return ~set_up:(return) ~test_fun:(listen_t rpc_iters) () in
+  let client = Bracket.return ~set_up:(return) ~test_fun:(connect_t rpc_iters) () in
   let clients = [ client ] in
   let cs = { server; clients } in
   (* Generate a random sockpath, and do not use tempfile, as 
    * that may be a no-exec mount point *) 
   let sockpath = sprintf "test_rpc_ping.%d.sock" (Random.int 10000) in
-  let csfd = procset_of_server (bracket_domain_socket cs) in
-  "rpc_ping" >::= Bracket.apply_p csfd sockpath
+  "rpc_ping" >::= test_procset_p cs sockpath
 
 let _ =
   let tests = rpc_ping 1000 20 in
