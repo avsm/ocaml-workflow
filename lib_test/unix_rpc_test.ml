@@ -17,6 +17,7 @@
 open Lwt
 open Printf
 open OUnit
+open Lwt_ounit
 open Lwt_ounit_unix
 
 let dprintf fmt =
@@ -73,27 +74,18 @@ let connect_t iters fd =
   done >>
   Lwt_rpc_unix.RPC.Client.close rpc
 
-let rpc_ping =
+let rpc_ping ~rpc_iters =
   let open Lwt_ounit_unix in
-  let iters = 10 in
-  let server = Bracket.return ~set_up:(return) (listen_t iters) in
-  let client = Bracket.return ~set_up:(return) (connect_t iters) in
+  let server = Bracket.return ~set_up:(return) (listen_t rpc_iters) in
+  let client = Bracket.return ~set_up:(return) (connect_t rpc_iters) in
   let clients = [ client ] in
   let cs = { server; clients } in
-  List.map (fun ty ->
-    let test_name = sprintf "rpc_ping_%s"
-      (match ty with
-       |Lwt_unix.SOCK_STREAM -> "stream"
-       |Lwt_unix.SOCK_DGRAM -> "dgram"
-       |_ -> "???")
-    in
-    (* Generate a random sockpath, and do not use tempfile, as 
-     * that may be a no-exec mount point *) 
-    let sockpath = sprintf "test_%s.%d.sock" test_name (Random.int 10000) in
-    let csfd = procset_of_server (bracket_domain_socket ~ty cs) in
-    test_name >:: Bracket.apply_p csfd sockpath
-  ) [Lwt_unix.SOCK_STREAM; Lwt_unix.SOCK_STREAM]
+  (* Generate a random sockpath, and do not use tempfile, as 
+   * that may be a no-exec mount point *) 
+  let sockpath = sprintf "test_rpc_ping.%d.sock" (Random.int 10000) in
+  let csfd = procset_of_server (bracket_domain_socket cs) in
+  "rpc_ping" >::= Bracket.apply_p csfd sockpath
 
 let _ =
-  let tests = rpc_ping in
+  let tests = rpc_ping 1000 20 in
   Lwt_ounit.main ~suite_name:"unix_rpc_test" ~tests
