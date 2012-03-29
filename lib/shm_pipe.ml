@@ -26,6 +26,7 @@ type handle = {
   (* Unidirectional data channels *)
   tx: [`tx] Simplex.ring;
   rx: [`rx] Simplex.ring;
+  mutable rx_closed: bool;
 }
 
 let dprintf fmt =
@@ -47,11 +48,15 @@ let streams_of_handle handle =
   let rx_stream = Lwt_stream.from
     (fun () ->
       match Lwt_sequence.take_opt_l rx_q with
-      |None ->
-        let t,u = Lwt.task () in
-        let node = Lwt_sequence.add_r u rx_waiters in
-        Lwt.on_cancel t (fun () -> Lwt_sequence.remove node);
-        t
+      |None -> begin
+        match handle.rx_closed with
+        |true -> return None
+        |false ->
+          let t,u = Lwt.task () in
+          let node = Lwt_sequence.add_r u rx_waiters in
+          Lwt.on_cancel t (fun () -> Lwt_sequence.remove node);
+          t
+      end
       |Some extent -> return (Some extent)
     )
   in
@@ -62,7 +67,9 @@ let streams_of_handle handle =
        let t,u = Lwt.task () in
        let node = Lwt_sequence.add_r u tx_waiters in
        Lwt.on_cancel t (fun () -> Lwt_sequence.remove node);
+dprintf "tx_aloc block\n%!";
        lwt () = t in
+dprintf "tx_aloc unblock\n%!";
        tx_alloc len
     |Some extent -> begin
        (* If there isn't enough room, then release the extent
@@ -71,29 +78,27 @@ let streams_of_handle handle =
           let t,u = Lwt.task () in
           let node = Lwt_sequence.add_r u tx_waiters in
           Lwt.on_cancel t (fun () -> Lwt_sequence.remove node);
+(* dprintf "tx_alloc tempo block %d %d\n%!" (Simplex.length extent) len; *)
+          Simplex.release extent;
           lwt () = t in
           tx_alloc len
         end else
           return extent
     end
   in
-  (* Transmit stream handler *)
-  let tx_stream, tx_push = Lwt_stream.create () in
-  let tx_t =
-    Lwt_stream.iter_s (fun (data : Simplex.op) ->
-      Lwt_io.write_value oc data
-    ) tx_stream
-  in
-  (* Wrapper functions to push the correct metadata *)
-  let tx_send extent = tx_push (Some (Simplex.to_send_op extent)) in
-  let tx_release extent = tx_push (Some (Simplex.to_free_op extent)) in
-  let tx_close () = tx_push None in
-  let d = ref 0 in
+  (* Tx functions to push the correct metadata *)
+  let tx_write op = try_lwt Lwt_io.write_value oc op with exn -> return () in
+  (* XXX notify the transmitter that the receiver has stopped listening, somehow.
+   * Right now we just ignore the metadata pipe disappearing *)
+  let tx_send extent = tx_write (Simplex.to_send_op extent) in
+  let tx_release extent = tx_write(Simplex.to_free_op extent) in
+  let tx_close () = tx_write (Simplex.to_close_op) in
   (* The metadata pipe coordinates all this *)
-  let metadata_t =
+  let _ =
     (* Create a buffered pipe *)
     while_lwt true do
-      Lwt_io.read_value ic >|= Simplex.on_op ~rx:handle.rx ~tx:handle.tx
+      Lwt_io.read_value ic >|= Simplex.on_op 
+        ~rx:handle.rx ~tx:handle.tx
         ~send:(fun extent -> (* received a Send *)
            match Lwt_sequence.take_opt_l rx_waiters with
            |None -> ignore(Lwt_sequence.add_r extent rx_q)
@@ -103,9 +108,11 @@ let streams_of_handle handle =
            match Lwt_sequence.take_opt_l tx_waiters with
            |None -> ()
            |Some u -> Lwt.wakeup u ()) 
+        ~close:(fun rx -> (* Rx ring is now Closed *)
+           handle.rx_closed <- true;
+           Lwt_sequence.iter_l (fun u -> Lwt.wakeup u None) rx_waiters)
     done
   in
-  let stream_t = tx_t <&> metadata_t in
   rx_stream, tx_send, tx_release, tx_close, tx_alloc
 
 (* A connect consists of a single handshake "packet" that
@@ -138,48 +145,43 @@ let make_send_ivs v =
   let buffer = Marshal.to_string v [] in
   let length = String.length buffer in
   [Lwt_unix.io_vector ~buffer ~offset:0 ~length]
-  
-(* A listening service sits on a well-known named socket and
- * waits for requests for a new duplex channel to come over it *)
-let listen ~name fn =
+
+let listen fd =
+  Sys.set_signal Sys.sigpipe Sys.Signal_ignore;
   let recv_buf = 32768 in
-  let sockaddr = Lwt_unix.ADDR_UNIX (socketpath ~name) in
-  let fd = Lwt_unix.(socket PF_UNIX SOCK_DGRAM 0) in
-  Lwt_unix.bind fd sockaddr;
-  let rec listen_t () =
-    let io_vectors, buffer = make_recv_ivs () in
-    lwt d, fds = Lwt_unix.recv_msg ~socket:fd ~io_vectors in
-    let client_h = Marshal.from_string buffer 0 in
-    let md, shm =
-     match fds with
-     |[md;shm] -> (Lwt_unix.of_unix_file_descr ~blocking:false ~set_flags:true md), (Shm.shm_of_unix_descr shm) 
-     |_ -> assert false 
-	in
-(* Attach the receive end of the metadata ring *)
-    let send_ring_rx = Simplex.attach_rx shm client_h.hc_tx_len in
-    (* Allocate a transmit ring for our side *)
-    let recv_fd = Shm.open_anonymous () in
-    let recv_ring_tx = Simplex.attach_tx recv_fd recv_buf in
-    (* Respond with the server handshake over the metadata socket *)
-    let server_h = { hs_name=client_h.hc_name; hc_rx_len=recv_buf } in
-    let io_vectors = make_send_ivs server_h in
-    lwt _ = Lwt_unix.send_msg ~socket:md ~io_vectors ~fds:[Shm.unix_descr_of_shm recv_fd] in
-    (* Launch the receive function asynchronously with the channel descr *)
-    let _ = fn {name=client_h.hc_name; tx=recv_ring_tx; rx=send_ring_rx; fd=md } in
-    listen_t ()
-  in
-  listen_t ()
+  let io_vectors, buffer = make_recv_ivs () in
+  Lwt_stream.from (fun () ->
+    try_lwt
+      lwt d, fds = Lwt_unix.recv_msg ~socket:fd ~io_vectors in
+      let client_h = Marshal.from_string buffer 0 in
+      let md, shm =
+        match fds with
+        |[md;shm] ->
+          (Lwt_unix.of_unix_file_descr ~blocking:false ~set_flags:true md), (Shm.shm_of_unix_descr shm) 
+        |_ -> assert false 
+      in
+      (* Attach the receive end of the metadata ring *)
+      let send_ring_rx = Simplex.attach_rx shm client_h.hc_tx_len in
+      (* Allocate a transmit ring for our side *)
+      let recv_fd = Shm.open_anonymous () in
+      let recv_ring_tx = Simplex.attach_tx recv_fd recv_buf in
+      (* Respond with the server handshake over the metadata socket *)
+      let server_h = { hs_name=client_h.hc_name; hc_rx_len=recv_buf } in
+      let io_vectors = make_send_ivs server_h in
+      lwt _ = Lwt_unix.send_msg ~socket:md ~io_vectors ~fds:[Shm.unix_descr_of_shm recv_fd] in
+      (* Launch the receive function asynchronously with the channel descr *)
+      let h = { name=client_h.hc_name; tx=recv_ring_tx; rx=send_ring_rx; fd=md; rx_closed=false } in
+      return (Some h)
+     with exn -> 
+      return None
+  )
 
 (* Connect to the listening socket and establish a duplex channel *)
-let connect ~name () =
-  let sockaddr = Lwt_unix.ADDR_UNIX (socketpath ~name) in
+let connect fd =
+  Sys.set_signal Sys.sigpipe Sys.Signal_ignore;
   let nr_pages = 8 in
   let nr_bytes = nr_pages * 4096 in
-  let fd = Lwt_unix.(socket PF_UNIX SOCK_DGRAM 0) in
-  let buffer = Marshal.to_string nr_bytes [] in
-  let iv = Lwt_unix.io_vector ~buffer ~offset:0 ~length:(String.length buffer) in
   (* connect to the socket and send the shmem fd *)
-  lwt () = Lwt_unix.connect fd sockaddr in
   (* make an shm fd *)
   let hc_name = "conn_name" in
   let shmfd = Shm.open_anonymous () in
@@ -191,12 +193,13 @@ let connect ~name () =
   let fds = [ (Lwt_unix.unix_file_descr md2); (Shm.unix_descr_of_shm shmfd) ] in
   let io_vectors = make_send_ivs client_h in
   lwt _ = Lwt_unix.send_msg ~socket:fd ~io_vectors ~fds in 
-  Lwt_unix.close fd >>
-  Lwt_unix.close md2 >>
+  Unix.close (Lwt_unix.unix_file_descr fd);
+  Unix.close (Lwt_unix.unix_file_descr md2);
+  (* XXX odd Lwt close bug here again *)
   (* receive the response from the metadata socket *)
   let io_vectors, buffer = make_recv_ivs () in
   lwt d, fds = Lwt_unix.recv_msg ~socket:md1 ~io_vectors in
   let server_h = Marshal.from_string buffer 0 in
   let recv_fd = match fds with |[fd] -> Shm.shm_of_unix_descr fd |_ -> assert false in
   let recv_ring_rx = Simplex.attach_rx recv_fd server_h.hc_rx_len in
-  return { name=server_h.hs_name; tx=send_ring_tx; rx=recv_ring_rx; fd=md1 } 
+  return { name=server_h.hs_name; tx=send_ring_tx; rx=recv_ring_rx; fd=md1; rx_closed=false } 
