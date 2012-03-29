@@ -20,36 +20,16 @@ type perf_ctr = {
   post_gc: Gc.stat;
 }
 
-val with_perf_ctrs : ('a -> 'b Lwt.t) -> 'a -> ('b * perf_ctr) Lwt.t
+type server_fun = Lwt_unix.file_descr -> Lwt_unix.sockaddr -> int -> unit Lwt.t
+type client_fun = Lwt_unix.file_descr -> Lwt_unix.sockaddr -> int -> unit Lwt.t
 
-module Bracket : sig
-  type ('a, 'b) t
+val with_server :
+  ?ty:Lwt_unix.socket_type -> string -> int -> server_fun -> unit -> unit Lwt.t
+val with_client :
+  ?ty:Lwt_unix.socket_type -> string -> int -> client_fun -> (unit -> unit Lwt.t) Lwt.t
+val run_p : ('a -> 'b Lwt.t) list -> 'a -> unit
+type procset = { server : server_fun; clients : client_fun list; }
+val test_procset_p :
+  name:string ->
+  iters:int -> ?ty:Lwt_unix.socket_type -> procset -> string -> unit -> unit
 
-  val return : set_up:('a -> 'b Lwt.t) -> ?tear_down:('b -> unit Lwt.t) ->
-      ?test_fun:('b -> unit Lwt.t) -> unit -> ('a, 'b) t
-
-  val bind : ('a, 'b) t -> ('b, 'c) t -> ('a, ('b * 'c)) t
-
-  val apply : ('a, 'b) t -> 'a -> unit Lwt.t
-
-  val apply_p : ('a, 'b) t list -> 'a -> unit -> unit
-
-  (* Apply a bracket multiple times and record the performance results
-   * for each iteration. *)
-  val apply_n : ('a, 'b) t -> 'a -> int -> perf_ctr list Lwt.t
-end
-
-type sockinfo = {
-  sockaddr : Lwt_unix.sockaddr; 
-  fd : Lwt_unix.file_descr; 
-}
-
-val with_server_socket : ?ty:Lwt_unix.socket_type -> (sockinfo, 'a) Bracket.t -> (string, sockinfo * 'a) Bracket.t
-val with_client_socket : ?ty:Lwt_unix.socket_type -> (sockinfo, 'a) Bracket.t -> (string, sockinfo * 'a) Bracket.t
-
-type ('a, 'b) procset = {
-  server : ('a, 'b) Bracket.t;
-  clients : ('a, 'b) Bracket.t list;
-}
-
-val test_procset_p: ?ty:Lwt_unix.socket_type -> (sockinfo, 'a) procset -> string -> unit -> unit

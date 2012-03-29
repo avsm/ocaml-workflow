@@ -31,7 +31,7 @@ let rec was_successful =
         false
 
 (* Convert a test into multiple iterations, each of which
- * has a unique TestLabel *)
+ * has a unique TestLabel. *)
 let test_iter label test_fun =
   let rec fn acc =
     function
@@ -42,7 +42,7 @@ let test_iter label test_fun =
   in fn [] 
 
 let (>::=) = test_iter
-    
+
 (* Main loop to invoke a suite of tests *)
 let main ~suite_name ~tests =
   let suite = suite_name >::: tests in

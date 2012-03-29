@@ -42,31 +42,57 @@ let dres req res =
   |Bar x, RBar x' -> "dres bar eq" @? (("XXX"^x) = x')
   |_ -> assert_failure "dreq != dres"
 
-let listen_t iters {fd} =
-  Lwt_unix.listen fd 5;
-  lwt fd, sa = Lwt_unix.accept fd in
-  let chan = Lwt_rpc_unix.Unix_transport.make fd in
-  let n = ref 0 in
-  let th,u = Lwt.task () in
-  let _ = Lwt_rpc_unix.RPC.Server.server chan 
-    (fun metadata req ->
-       let res =
-         match req with
+(* Parameters: number of clients to accept, the 
+ * fd and sockaddr to listen/accept on, and the
+ * number of messages each client is expected to
+ * send per connection.
+ * The thread will do an efficient accept_n to
+ * grab as many connections simultaneously as it can.
+ *)
+let server num_clients fd sockaddr iters_per_client =
+  let listen_q = 10 in
+  Lwt_unix.listen fd listen_q;
+  (* For a single fd, process the RPCs *)
+  let process fd =
+    let chan = Lwt_rpc_unix.Unix_transport.make fd in
+    let n = ref 0 in
+    let th,u = Lwt.task () in
+    let _ = Lwt_rpc_unix.RPC.Server.server chan 
+      (fun metadata req ->
+        let res = match req with
          |Foo x -> RFoo (x*100)
          |Bar x -> RBar ("XXX"^x)
-       in
-       dres req res;
-       incr n;
-       if !n > iters then Lwt.wakeup u ();
-       return (res,[])
-    )
+        in
+        incr n;
+        if !n >= iters_per_client then Lwt.wakeup u ();
+        return (res,[])
+      )
+    in
+    th
   in
-  th
+  (* We need to accept a total of num_clients exactly *)
+  let rec accept_all acc remaining =
+    match_lwt Lwt_unix.accept_n fd listen_q with
+    |_, Some exn -> fail exn
+    |fds, None -> begin
+      let acc_p = List.map (fun (fd,sa) -> process fd) fds in
+      let acc = acc_p @ acc in
+      match remaining - (List.length fds) with
+      |0 -> return acc
+      |n when n < 0 -> assert_failure "too many connections"
+      |n -> accept_all acc n
+    end  
+ in
+ lwt processing_threads = accept_all [] num_clients in
+ Lwt.join processing_threads
 
-let connect_t iters {fd} =
+(* The client needs to connect to fd and send exactly [iters]
+ * RPCs to the server.
+ *)
+let client fd sockaddr iters =
   let chan = Lwt_rpc_unix.Unix_transport.make fd in
   let rpc = Lwt_rpc_unix.RPC.Client.client chan in
-  for_lwt i = 0 to iters do
+  for_lwt i = 0 to iters - 1 do
     let req = Foo i in
     match_lwt Lwt_rpc_unix.RPC.Client.send rpc req [] with
     |None -> dprintf "None\n%!"; return ()
@@ -74,17 +100,17 @@ let connect_t iters {fd} =
   done >>
   Lwt_rpc_unix.RPC.Client.close rpc
 
-let rpc_ping ~rpc_iters =
+(* Run a smoke test to make sure things work, but without the performance
+ * counters (which are relatively slow). *)
+let rpc_ping_smoke ~rpc_iters =
   let open Lwt_ounit_unix in
-  let server = Bracket.return ~set_up:(return) ~test_fun:(listen_t rpc_iters) () in
-  let client = Bracket.return ~set_up:(return) ~test_fun:(connect_t rpc_iters) () in
-  let clients = [ client ] in
-  let cs = { server; clients } in
+  let clients = [ client; client; client ] in
+  let ps = { server = server (List.length clients); clients } in
   (* Generate a random sockpath, and do not use tempfile, as 
    * that may be a no-exec mount point *) 
-  let sockpath = sprintf "test_rpc_ping.%d.sock" (Random.int 10000) in
-  "rpc_ping" >::= test_procset_p cs sockpath
+  let sockpath = sprintf "test_rpc_ping_smoke.%d.sock" (Random.int 10000) in
+  "rpc_ping_smoke" >::= test_procset_p ~name:"rpc_ping" ~iters:rpc_iters ps sockpath
 
 let _ =
-  let tests = rpc_ping 1000 20 in
+  let tests = rpc_ping_smoke ~rpc_iters:1000 20 in
   Lwt_ounit.main ~suite_name:"unix_rpc_test" ~tests
