@@ -76,11 +76,23 @@ let buf_is_member ring buf =
 type op =
 |Send of int * int
 |Free of int * int
+|Close
 
 let to_send_op (_,(off,len)) = Send (off,len)
 let to_free_op (_,(off,len)) = Free (off,len)
-let on_op ~rx ~tx ~send ~free =
+let to_close_op = Close
+let on_op ~rx ~tx ~send ~free ~close =
   function
   |Send (off,len) -> send (rx, (off,len))
   |Free (off,len) -> free (tx, (off,len))
+  |Close -> close rx
 
+let debug_op op =
+let open Printf in
+  Printf.eprintf "op: %s\n%!"
+    (match op with
+     |Send (a,b) -> sprintf "Send(%d,%d)" a b
+     |Free (a,b) -> sprintf "Free(%d,%d)" a b
+     |Close -> "Close"
+    )
+ 

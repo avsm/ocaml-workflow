@@ -35,6 +35,13 @@ val offset  : [<`tx|`rx] extent -> int
 type op
 val to_send_op : 'a extent -> op
 val to_free_op : 'a extent -> op
+val to_close_op : op
 (* Multiplex a received operation to the respective handlers *)
-val on_op : rx:([`rx] ring) -> tx:([`tx] ring) ->
-  send:([`rx] extent -> unit) -> free:([`tx] extent -> unit) -> op -> unit
+val on_op : 
+  rx:([`rx] ring) ->
+  tx:([`tx] ring) ->
+  send:([`rx] extent -> unit) ->
+  free:([`tx] extent -> unit) -> 
+  close:([`rx] ring -> unit) -> op -> unit
+
+val debug_op : op -> unit
