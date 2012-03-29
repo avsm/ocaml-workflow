@@ -49,6 +49,11 @@ Test simplex_test
   Command:            $simplex_test
   WorkingDirectory:   lib_test
 
+Test shm_pipe_test
+  Run$:               flag(tests)
+  Command:            $shm_pipe_test
+  WorkingDirectory:   lib_test
+
 Test unix_rpc_test
   Run$:               flag(tests)
   Command:            $unix_rpc_test
