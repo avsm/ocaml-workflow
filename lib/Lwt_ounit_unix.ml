@@ -19,6 +19,10 @@ open OUnit
 open Printf
 open Lwt
 
+let dprintf fmt =
+  let xfn ch = fprintf ch fmt in
+  kfprintf xfn stderr "[%d] " (Unix.getpid())
+
 (* Run an Lwt main loop and return the value from the thread *)
 let lwt_run fn a =
   try
@@ -26,27 +30,38 @@ let lwt_run fn a =
     exit 0
   with
     |Unix.Unix_error (e,_,_) as exn ->
-      eprintf "%s (%s)\n%!" (Printexc.to_string exn) (Unix.error_message e);
+      dprintf "%s (%s)\n%!" (Printexc.to_string exn) (Unix.error_message e);
       exit (-1)
     |exn ->
-      eprintf "%d: %s\n%!" (Unix.getpid()) (Printexc.to_string exn);
+      dprintf "Toplevel exn %s\n%!" (Printexc.to_string exn);
       exit (-1)
   
 (* Wait for a set of child processes to terminate, and fail the test if
  * any of the process set had an abnormal exit code *)
-let rec test_waitpid acc =
+let test_waitpid pids =
+  let fails = ref [] in
+  let rec fn acc =
   function
-  |[] -> "child processes" @? acc
-  |pid::tl as pids -> begin
+  |[] ->
+    (sprintf "waitpid %s" (String.concat "," (List.map string_of_int !fails))) @? acc
+  |pid::tl -> begin
     try
       match Unix.waitpid [] pid with
       |_, Unix.WEXITED st when st = 0 ->
-        test_waitpid acc tl
+        fn acc tl
+      |_, Unix.WEXITED st ->
+        fails := pid :: !fails;
+        fn false tl
+      |_, Unix.WSIGNALED s ->
+         dprintf "Signal killed the process! %d\n%!" s;
+         fn false tl
       |_,_ ->
-        test_waitpid false tl
+        fails := pid :: !fails;
+        fn false tl
     with Unix.Unix_error(Unix.EINTR,_,_) ->
-      test_waitpid acc pids
+      fn acc (pid::tl)
    end
+  in fn true pids
 
 type perf_ctr = {
   execution_time: float;
@@ -117,7 +132,7 @@ let with_server ?(ty=Lwt_unix.SOCK_STREAM) sockpath iters (fn:server_fun) () =
     fn fd sockaddr iters
   finally
     begin
-    Unix.close (Lwt_unix.unix_file_descr fd);
+    (try Unix.close (Lwt_unix.unix_file_descr fd) with _ -> ());
     (match sockaddr with
     |Lwt_unix.ADDR_UNIX sockpath -> (try Unix.unlink sockpath with _ -> ());
     |_ -> ());
@@ -163,7 +178,7 @@ let run_p fns v =
     |[] -> List.rev acc
   in      
   let pids = fork_all [] fns in
-  test_waitpid true pids
+  test_waitpid pids
 
 type procset = {
  server: server_fun;
