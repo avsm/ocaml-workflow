@@ -10,7 +10,7 @@ BuildTools:  ocamlbuild
 Library workflow
   Path:       lib
   Findlibname: workflow
-  Modules: Shm,Simplex,Shm_pipe,Lwt_rpc,Lwt_rpc_unix,Lwt_ounit_unix
+  Modules: Shm,Simplex,Shm_pipe,Lwt_rpc,Lwt_rpc_unix,Lwt_ounit_unix,Lwt_flow,Tcp_pipe
   BuildDepends:	lwt.syntax, lwt, lwt.unix, ocamlgraph, unix, oUnit
   CSources: shmem_stubs.c,simplex_stubs.c
   if system(linux)
@@ -23,6 +23,14 @@ Flag tests
 Executable shm_pipe_test
   Path:               lib_test
   MainIs:             shm_pipe_test.ml
+  Custom:             true
+  CompiledObject:     best
+  Install:            false
+  BuildDepends:       workflow,lwt,lwt.unix
+
+Executable tcp_pipe_test
+  Path:               lib_test
+  MainIs:             tcp_pipe_test.ml
   Custom:             true
   CompiledObject:     best
   Install:            false
@@ -52,6 +60,11 @@ Test simplex_test
 Test shm_pipe_test
   Run$:               flag(tests)
   Command:            $shm_pipe_test
+  WorkingDirectory:   lib_test
+
+Test tcp_pipe_test
+  Run$:               flag(tests)
+  Command:            $tcp_pipe_test
   WorkingDirectory:   lib_test
 
 Test unix_rpc_test

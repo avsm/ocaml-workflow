@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 8e96133ac070d65256f87edd8be95a4c)
+# DO NOT EDIT (digest: 46d885a5b4bc53d35bed796a4b796713)
 # Ignore VCS directories, you can use the same kind of rule outside 
 # OASIS_START/STOP if you want to exclude directories that contains 
 # useless stuff for the build process
@@ -48,6 +48,15 @@
 <lib_test/unix_rpc_test.{native,byte}>: pkg_lwt.syntax
 <lib_test/unix_rpc_test.{native,byte}>: pkg_lwt
 <lib_test/unix_rpc_test.{native,byte}>: custom
+# Executable tcp_pipe_test
+<lib_test/tcp_pipe_test.{native,byte}>: use_workflow
+<lib_test/tcp_pipe_test.{native,byte}>: pkg_unix
+<lib_test/tcp_pipe_test.{native,byte}>: pkg_ocamlgraph
+<lib_test/tcp_pipe_test.{native,byte}>: pkg_oUnit
+<lib_test/tcp_pipe_test.{native,byte}>: pkg_lwt.unix
+<lib_test/tcp_pipe_test.{native,byte}>: pkg_lwt.syntax
+<lib_test/tcp_pipe_test.{native,byte}>: pkg_lwt
+<lib_test/tcp_pipe_test.{native,byte}>: custom
 # Executable simplex_test
 <lib_test/simplex_test.{native,byte}>: use_workflow
 <lib_test/simplex_test.{native,byte}>: pkg_unix
