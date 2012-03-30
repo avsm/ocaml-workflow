@@ -174,6 +174,7 @@ let with_client ?(ty=Unix.SOCK_STREAM) sockaddr iters iterfn =
 
 let make_unix_sockaddr ?(name="foo") () =
   let sockpath = sprintf "test_%s.%d.sock" name (Random.int 20000) in
+  if Sys.file_exists sockpath then Unix.unlink sockpath;
   Unix.ADDR_UNIX sockpath
 
 let make_tcp_sockaddr ?(port=6788) () =
