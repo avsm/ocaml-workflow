@@ -129,7 +129,11 @@ let make_socket ty sockaddr =
   let af = match sockaddr with
     |Unix.ADDR_UNIX _ -> Unix.PF_UNIX
     |Unix.ADDR_INET _ -> Unix.PF_INET in
-  Lwt_unix.socket af ty 0
+  let fd = Lwt_unix.socket af ty 0 in
+  (match af with
+  |Unix.PF_INET -> Lwt_unix.(setsockopt fd SO_REUSEADDR true)
+  |_ -> ());
+  fd
   
 let with_server ?(ty=Unix.SOCK_STREAM) sockaddr iters (fn:server_fun) () =
   let fd = make_socket ty sockaddr in
