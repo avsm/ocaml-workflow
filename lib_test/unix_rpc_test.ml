@@ -108,8 +108,8 @@ let rpc_ping_smoke ~rpc_iters =
   let ps = { server = server (List.length clients); clients } in
   (* Generate a random sockpath, and do not use tempfile, as 
    * that may be a no-exec mount point *) 
-  let sockpath = sprintf "test_rpc_ping_smoke.%d.sock" (Random.int 10000) in
-  "rpc_ping_smoke" >::= test_procset_p ~name:"rpc_ping" ~iters:rpc_iters ps sockpath
+  let sockaddr = make_unix_sockaddr ~name:"rpc_ping" () in
+  "rpc_ping_smoke" >::= test_procset_p ~name:"rpc_ping" ~iters:rpc_iters ps sockaddr
 
 let _ =
   let tests = rpc_ping_smoke ~rpc_iters:1000 20 in

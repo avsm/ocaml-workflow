@@ -27,41 +27,40 @@ let server num_clients fd sa client_iters =
   let listen_stream = Shm_pipe.listen fd in
   let th,u = Lwt.task () in
   let n = ref 0 in
+  (* Handle a new connection *)
   let process h =
-    let rx, tx_send, tx_release, tx_close, tx_alloc = Shm_pipe.streams_of_handle h in
+    let ch = Shm_pipe.make_flow h in
     lwt () =
       for_lwt i = 0 to client_iters - 1 do
         let data = sprintf "%d*\n%!" i in
-        lwt ext = tx_alloc (String.length data) in
+        lwt ext = Lwt_flow.TX.alloc ch (String.length data) in
         let buf = Simplex.buffer ext in
         Lwt_bytes.blit_string_bytes data 0 buf 0 (String.length data);
-        tx_send ext >>
-        return ()
+        Lwt_flow.TX.send ch ext
       done
     in
-    tx_close () >>
-    return ()
+    Lwt_flow.close ch
   in
-  let listen_t = Lwt_stream.iter_s (fun h ->
-    lwt () = process h in
-    incr n;
-    if !n >= num_clients then Lwt.wakeup u ();
-    return ()
-  ) listen_stream in
+  let listen_t =
+    Lwt_stream.iter_s (fun h ->
+      lwt () = process h in
+      incr n;
+      if !n >= num_clients then Lwt.wakeup u ();
+      return ()
+    ) listen_stream in
   lwt () = th in
   Lwt.cancel listen_t;
   return ()
 
 let client fd sockaddr num_iters =
-  lwt ch = Shm_pipe.connect fd in
-  let rx, tx_send, tx_release, tx_close, tx_alloc = Shm_pipe.streams_of_handle ch in
-  let t = Lwt_stream.iter_s
+  lwt h = Shm_pipe.connect fd in
+  let ch = Shm_pipe.make_flow h in
+  let t = Lwt_flow.RX.recv
     (fun ext ->
       let _ = Simplex.buffer ext in
-      tx_release ext
-    ) rx 
-  in
-  tx_close () >>
+      Lwt_flow.RX.release ch ext
+    ) ch in
+  Lwt_flow.close ch >>
   t
 
 let shm_pipe_test ~rpc_iters =
@@ -70,9 +69,9 @@ let shm_pipe_test ~rpc_iters =
   let ps = { server = server (List.length clients); clients } in
   (* Generate a random sockpath, and do not use tempfile, as 
    * that may be a no-exec mount point *) 
-  let sockpath = sprintf "shm_pipe_test.%d.sock" (Random.int 10000) in
+  let sockaddr = make_unix_sockaddr ~name:"shm_pipe" () in
   "rpc_ping_smoke" >::= test_procset_p ~name:"rpc_ping"
-    ~ty:Lwt_unix.SOCK_DGRAM ~iters:rpc_iters ps sockpath
+    ~ty:Lwt_unix.SOCK_DGRAM ~iters:rpc_iters ps sockaddr
 
 let _ =
   let tests = shm_pipe_test ~rpc_iters:10000 10 in
