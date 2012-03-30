@@ -34,7 +34,7 @@ let dprintf fmt =
 let make_flow h =
   let rx_stream = Lwt_stream.from
     (fun () ->
-      match_lwt Lwt_io.read h.ic with
+      try_lwt
       |"" -> return None
       |x -> return (Some x)
     )
@@ -52,7 +52,10 @@ let make_flow h =
     (try Unix.close (Lwt_unix.unix_file_descr h.fd) with _ -> ());
     return ()
   in
-  let tx_send buf = Lwt_io.write h.oc buf in
+  let tx_send buf =
+    try_lwt Lwt_io.write h.oc buf >> return true
+    with exn -> return false
+  in
   Lwt_flow.make ~rx_stream ~rx_release ~tx_send ~tx_release ~tx_close ~tx_alloc
 
 let string_of_sockaddr =

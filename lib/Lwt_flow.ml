@@ -21,7 +21,7 @@ open Printf
 type ba = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
 
 type 'a tx = {
-  tx_send: 'a -> unit Lwt.t;
+  tx_send: 'a -> bool Lwt.t;
   tx_close: unit -> unit Lwt.t;
   tx_alloc: int -> 'a Lwt.t;
   tx_release: 'a -> unit Lwt.t;
@@ -41,7 +41,8 @@ type ('a, 'b) t = {
 let make ~rx_stream ~rx_release ~tx_send ~tx_release ~tx_close ~tx_alloc =
   let tx = { tx_send; tx_release; tx_close; tx_alloc } in
   let rx = { rx_stream; rx_release } in
-  {tx; rx}
+  let t, u = Lwt.task () in
+  {tx; rx; }
 
 module TX = struct
 

@@ -90,7 +90,10 @@ let make_flow handle =
   let md_write op = try_lwt Lwt_io.write_value oc op with exn -> return () in
   (* XXX notify the transmitter that the receiver has stopped listening, somehow.
    * Right now we just ignore the metadata pipe disappearing *)
-  let tx_send extent = md_write (Simplex.to_send_op extent) in
+  let tx_send extent =
+     try_lwt Lwt_io.write_value oc (Simplex.to_send_op extent) >> return true
+     with exn -> return false 
+  in  
   let tx_close () = md_write (Simplex.to_close_op) in
   let rx_release extent = md_write(Simplex.to_free_op extent) in
   (* The metadata pipe coordinates all this *)
