@@ -67,5 +67,4 @@ module RX = struct
 end
 
 let close ch =
-  eprintf "Lwt_flow: close\n%!";
-  return ()
+  ch.tx.tx_close ()

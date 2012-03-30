@@ -27,7 +27,6 @@ let dprintf fmt =
 let lwt_run fn a =
   try
     let _ = Lwt_main.run (fn a) in
-dprintf "done\n%!";
     exit 0
   with
     |Unix.Unix_error (e,_,_) as exn ->
