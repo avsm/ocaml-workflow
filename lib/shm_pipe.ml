@@ -96,7 +96,7 @@ let make_flow handle =
   (* The metadata pipe coordinates all this *)
   let _ =
     (* Create a buffered pipe *)
-    while_lwt true do
+    try_lwt while_lwt true do
       Lwt_io.read_value ic >|= Simplex.on_op 
         ~rx:handle.rx ~tx:handle.tx
         ~send:(fun extent -> (* received a Send *)
@@ -111,7 +111,10 @@ let make_flow handle =
         ~close:(fun rx -> (* Rx ring is now Closed *)
            handle.rx_closed <- true;
            Lwt_sequence.iter_l (fun u -> Lwt.wakeup u None) rx_waiters)
-    done
+    done with exn ->
+      handle.rx_closed <- true;
+      Lwt_sequence.iter_l (fun u -> Lwt.wakeup u None) rx_waiters;
+      return ()
   in
   Lwt_flow.make ~rx_stream ~rx_release ~tx_send ~tx_release ~tx_close ~tx_alloc
 
