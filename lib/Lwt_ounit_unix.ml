@@ -27,6 +27,7 @@ let dprintf fmt =
 let lwt_run fn a =
   try
     let _ = Lwt_main.run (fn a) in
+dprintf "done\n%!";
     exit 0
   with
     |Unix.Unix_error (e,_,_) as exn ->
@@ -124,9 +125,14 @@ let with_perf_n ~name ~iters fn =
 type server_fun = Lwt_unix.file_descr -> Lwt_unix.sockaddr -> int -> unit Lwt.t
 type client_fun = Lwt_unix.file_descr -> Lwt_unix.sockaddr -> (int -> unit Lwt.t)
 
-let with_server ?(ty=Lwt_unix.SOCK_STREAM) sockpath iters (fn:server_fun) () =
-  let sockaddr = Lwt_unix.ADDR_UNIX sockpath in
-  let fd = Lwt_unix.socket Lwt_unix.PF_UNIX ty 0 in
+let make_socket ty sockaddr =
+  let af = match sockaddr with
+    |Unix.ADDR_UNIX _ -> Unix.PF_UNIX
+    |Unix.ADDR_INET _ -> Unix.PF_INET in
+  Lwt_unix.socket af ty 0
+  
+let with_server ?(ty=Unix.SOCK_STREAM) sockaddr iters (fn:server_fun) () =
+  let fd = make_socket ty sockaddr in
   Lwt_unix.bind fd sockaddr;
   try_lwt
     fn fd sockaddr iters
@@ -139,9 +145,8 @@ let with_server ?(ty=Lwt_unix.SOCK_STREAM) sockpath iters (fn:server_fun) () =
     return ();
     end
 
-let with_client ?(ty=Lwt_unix.SOCK_STREAM) sockpath iters iterfn =
-  let sockaddr = Lwt_unix.ADDR_UNIX sockpath in
-  let fd = Lwt_unix.socket Lwt_unix.PF_UNIX ty 0 in
+let with_client ?(ty=Unix.SOCK_STREAM) sockaddr iters iterfn =
+  let fd = make_socket ty sockaddr in
   let rec connect =
     function
     |100 -> assert_failure "connect"
@@ -162,6 +167,13 @@ let with_client ?(ty=Lwt_unix.SOCK_STREAM) sockpath iters iterfn =
       return ()
   in
   return iter_t
+
+let make_unix_sockaddr ?(name="foo") () =
+  let sockpath = sprintf "test_%s.%d.sock" name (Random.int 20000) in
+  Unix.ADDR_UNIX sockpath
+
+let make_tcp_sockaddr ?(port=6788) () =
+  Unix.ADDR_INET (Unix.inet_addr_loopback, port)
 
 let run_p fns v =
   (* TODO: add a logger here that could capture the process output *)
@@ -186,13 +198,13 @@ type procset = {
 }
 
 (* Test a procset, after framing it with a domain socket thread *)
-let test_procset_p ~name ~iters ?(ty=Lwt_unix.SOCK_STREAM) ps sockpath () =
-  let server = with_server ~ty sockpath iters ps.server in
+let test_procset_p ~name ~iters ?(ty=Lwt_unix.SOCK_STREAM) ps sockaddr () =
+  let server = with_server ~ty sockaddr iters ps.server in
   (* Connect all the clients and wait until they are ready to go *)
   let clients = List.map
     (fun cl ->
        fun () ->
-         lwt cfn = with_client ~ty sockpath iters cl in
+         lwt cfn = with_client ~ty sockaddr iters cl in
          cfn ()
     ) ps.clients
   in 

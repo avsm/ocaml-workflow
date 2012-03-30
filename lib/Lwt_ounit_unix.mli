@@ -31,9 +31,9 @@ type client_fun = Lwt_unix.file_descr -> Lwt_unix.sockaddr -> int -> unit Lwt.t
 (* Create a server socket, given a string socket path and a total number of expected iterations, 
  * and a server function to process incoming connections. The result is staged with a () to
  * curry it up as a test function *)
-val with_server : ?ty:Lwt_unix.socket_type -> string -> int -> server_fun -> unit -> unit Lwt.t
+val with_server : ?ty:Lwt_unix.socket_type -> Lwt_unix.sockaddr -> int -> server_fun -> unit -> unit Lwt.t
 
-val with_client : ?ty:Lwt_unix.socket_type -> string -> int -> client_fun -> (unit -> unit Lwt.t) Lwt.t
+val with_client : ?ty:Lwt_unix.socket_type -> Lwt_unix.sockaddr -> int -> client_fun -> (unit -> unit Lwt.t) Lwt.t
 
 (* Given a list of Lwt threads, run them in independent processes and join until all processes
  * terminal *)
@@ -41,5 +41,10 @@ val run_p : ('a -> 'b Lwt.t) list -> 'a -> unit
 
 type procset = { server : server_fun; clients : client_fun list; }
 
-val test_procset_p : name:string -> iters:int -> ?ty:Lwt_unix.socket_type -> procset -> string -> unit -> unit
+val test_procset_p : name:string -> iters:int -> ?ty:Lwt_unix.socket_type -> procset -> Lwt_unix.sockaddr -> unit -> unit
 
+(* Construct a unique UNIX domain sockaddr *)
+val make_unix_sockaddr: ?name:string -> unit -> Lwt_unix.sockaddr
+
+(* Construct a unique TCP sockaddr bound to localhost *)
+val make_tcp_sockaddr: ?port:int -> unit -> Lwt_unix.sockaddr
