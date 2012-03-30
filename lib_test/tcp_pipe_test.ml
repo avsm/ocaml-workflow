@@ -16,6 +16,7 @@
 
 open Lwt
 open Printf
+open OUnit
 open Lwt_ounit
 open Lwt_ounit_unix
 
@@ -33,7 +34,9 @@ let server num_clients fd sa client_iters =
     lwt () =
       for_lwt i = 0 to client_iters - 1 do
         let data = sprintf "%d*\n%!" i in
-        Lwt_flow.TX.send ch data
+        match_lwt Lwt_flow.TX.send ch data with
+        |true -> return ()
+        |false -> eprintf "TCP write failed\n%!"; exit (-1)
       done
     in
     Lwt_flow.close ch
@@ -52,12 +55,10 @@ let server num_clients fd sa client_iters =
 let client fd sockaddr num_iters =
   lwt h = Tcp_pipe.connect fd in
   let ch = Tcp_pipe.make_flow h in
-  let t = Lwt_flow.RX.recv
+  Lwt_flow.RX.recv
     (fun ext ->
       Lwt_flow.RX.release ch ext
-    ) ch in
-  Lwt_flow.close ch >>
-  t
+    ) ch
 
 let tcp_pipe_test ~rpc_iters =
   let open Lwt_ounit_unix in

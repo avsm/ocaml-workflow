@@ -16,6 +16,7 @@
 
 open Lwt
 open Printf
+open OUnit
 open Lwt_ounit
 open Lwt_ounit_unix
 
@@ -36,7 +37,9 @@ let server num_clients fd sa client_iters =
         lwt ext = Lwt_flow.TX.alloc ch (String.length data) in
         let buf = Simplex.buffer ext in
         Lwt_bytes.blit_string_bytes data 0 buf 0 (String.length data);
-        Lwt_flow.TX.send ch ext
+        match_lwt Lwt_flow.TX.send ch ext with
+        |true -> return ()
+        |false -> assert_failure "shm write failed!\n%!"
       done
     in
     Lwt_flow.close ch
@@ -55,13 +58,11 @@ let server num_clients fd sa client_iters =
 let client fd sockaddr num_iters =
   lwt h = Shm_pipe.connect fd in
   let ch = Shm_pipe.make_flow h in
-  let t = Lwt_flow.RX.recv
+  Lwt_flow.RX.recv
     (fun ext ->
       let _ = Simplex.buffer ext in
       Lwt_flow.RX.release ch ext
-    ) ch in
-  Lwt_flow.close ch >>
-  t
+    ) ch
 
 let shm_pipe_test ~rpc_iters =
   let open Lwt_ounit_unix in
