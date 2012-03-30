@@ -62,6 +62,7 @@ let string_of_sockaddr =
   |Unix.ADDR_INET (s,p) -> sprintf "tcp:%s:%d" (string_of_inet_addr s) p
 
 let listen fd =
+  Sys.set_signal Sys.sigpipe Sys.Signal_ignore;
   Lwt_unix.listen fd 10;
   Lwt_stream.from (fun () ->
     try_lwt
@@ -77,6 +78,7 @@ let listen fd =
 
 (* Assume a connected fd for now, as the test framework does this *)
 let connect fd =
+  Sys.set_signal Sys.sigpipe Sys.Signal_ignore;
   let name = "tcp:connect" in
   let ic = Lwt_io.(of_fd ~mode:input fd) in
   let oc = Lwt_io.(of_fd ~mode:output fd) in
