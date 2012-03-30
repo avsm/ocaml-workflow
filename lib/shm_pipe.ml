@@ -19,10 +19,10 @@ open Lwt
 open Printf
 
 type handle = {
-  (* metadata pipe *)
-  fd: Lwt_unix.file_descr;
   (* human-readable name for this handle *)
   name: string;
+  (* metadata pipe *)
+  fd: Lwt_unix.file_descr;
   (* Unidirectional data channels *)
   tx: [`tx] Simplex.ring;
   rx: [`rx] Simplex.ring;
@@ -34,7 +34,7 @@ let dprintf fmt =
   kfprintf xfn stderr "[%d] " (Unix.getpid())
 
 (* Given a handle, retrieve a pair of input/output streams *)
-let streams_of_handle handle =
+let make_flow handle =
   (* Buffered metadata channels *)
   let ic = Lwt_io.(of_fd ~mode:input handle.fd) in
   let oc = Lwt_io.(of_fd ~mode:output handle.fd) in
@@ -67,9 +67,7 @@ let streams_of_handle handle =
        let t,u = Lwt.task () in
        let node = Lwt_sequence.add_r u tx_waiters in
        Lwt.on_cancel t (fun () -> Lwt_sequence.remove node);
-dprintf "tx_aloc block\n%!";
        lwt () = t in
-dprintf "tx_aloc unblock\n%!";
        tx_alloc len
     |Some extent -> begin
        (* If there isn't enough room, then release the extent
@@ -78,7 +76,6 @@ dprintf "tx_aloc unblock\n%!";
           let t,u = Lwt.task () in
           let node = Lwt_sequence.add_r u tx_waiters in
           Lwt.on_cancel t (fun () -> Lwt_sequence.remove node);
-(* dprintf "tx_alloc tempo block %d %d\n%!" (Simplex.length extent) len; *)
           Simplex.release extent;
           lwt () = t in
           tx_alloc len
@@ -86,13 +83,16 @@ dprintf "tx_aloc unblock\n%!";
           return extent
     end
   in
+  (* Release a local TX buffer transmitter has decided not to use
+   * any more *)
+  let tx_release ext = Simplex.release ext; return () in
   (* Tx functions to push the correct metadata *)
-  let tx_write op = try_lwt Lwt_io.write_value oc op with exn -> return () in
+  let md_write op = try_lwt Lwt_io.write_value oc op with exn -> return () in
   (* XXX notify the transmitter that the receiver has stopped listening, somehow.
    * Right now we just ignore the metadata pipe disappearing *)
-  let tx_send extent = tx_write (Simplex.to_send_op extent) in
-  let tx_release extent = tx_write(Simplex.to_free_op extent) in
-  let tx_close () = tx_write (Simplex.to_close_op) in
+  let tx_send extent = md_write (Simplex.to_send_op extent) in
+  let tx_close () = md_write (Simplex.to_close_op) in
+  let rx_release extent = md_write(Simplex.to_free_op extent) in
   (* The metadata pipe coordinates all this *)
   let _ =
     (* Create a buffered pipe *)
@@ -113,7 +113,7 @@ dprintf "tx_aloc unblock\n%!";
            Lwt_sequence.iter_l (fun u -> Lwt.wakeup u None) rx_waiters)
     done
   in
-  rx_stream, tx_send, tx_release, tx_close, tx_alloc
+  Lwt_flow.make ~rx_stream ~rx_release ~tx_send ~tx_release ~tx_close ~tx_alloc
 
 (* A connect consists of a single handshake "packet" that
  * contains data with handshake information, and two file
@@ -131,10 +131,6 @@ type handshake_client = {
   hs_name: string;
   hc_rx_len: int;
 }
-
-(* TODO dont put in cwd *)
-let socketpath ~name =
-  sprintf "fable-%s.sock" name
 
 let make_recv_ivs () =
   let length = 8192 in
@@ -157,7 +153,8 @@ let listen fd =
       let md, shm =
         match fds with
         |[md;shm] ->
-          (Lwt_unix.of_unix_file_descr ~blocking:false ~set_flags:true md), (Shm.shm_of_unix_descr shm) 
+          (Lwt_unix.of_unix_file_descr ~blocking:false ~set_flags:true md),
+          (Shm.shm_of_unix_descr shm) 
         |_ -> assert false 
       in
       (* Attach the receive end of the metadata ring *)
