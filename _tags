@@ -1,18 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 46d885a5b4bc53d35bed796a4b796713)
-# Ignore VCS directories, you can use the same kind of rule outside 
-# OASIS_START/STOP if you want to exclude directories that contains 
-# useless stuff for the build process
-<**/.svn>: -traverse
-<**/.svn>: not_hygienic
-".bzr": -traverse
-".bzr": not_hygienic
-".hg": -traverse
-".hg": not_hygienic
-".git": -traverse
-".git": not_hygienic
-"_darcs": -traverse
-"_darcs": not_hygienic
+# DO NOT EDIT (digest: 4060b9185c901e1a5073d09c56bc21f0)
 # Library workflow
 "lib": include
 <lib/workflow.{cma,cmxa}>: oasis_library_workflow_cclib
@@ -39,6 +26,15 @@
 "lib/simplex_stubs.c": pkg_lwt.unix
 "lib/simplex_stubs.c": pkg_lwt.syntax
 "lib/simplex_stubs.c": pkg_lwt
+# Executable simplex_test
+<lib_test/simplex_test.{native,byte}>: use_workflow
+<lib_test/simplex_test.{native,byte}>: pkg_unix
+<lib_test/simplex_test.{native,byte}>: pkg_ocamlgraph
+<lib_test/simplex_test.{native,byte}>: pkg_oUnit
+<lib_test/simplex_test.{native,byte}>: pkg_lwt.unix
+<lib_test/simplex_test.{native,byte}>: pkg_lwt.syntax
+<lib_test/simplex_test.{native,byte}>: pkg_lwt
+<lib_test/simplex_test.{native,byte}>: custom
 # Executable unix_rpc_test
 <lib_test/unix_rpc_test.{native,byte}>: use_workflow
 <lib_test/unix_rpc_test.{native,byte}>: pkg_unix
@@ -57,15 +53,6 @@
 <lib_test/tcp_pipe_test.{native,byte}>: pkg_lwt.syntax
 <lib_test/tcp_pipe_test.{native,byte}>: pkg_lwt
 <lib_test/tcp_pipe_test.{native,byte}>: custom
-# Executable simplex_test
-<lib_test/simplex_test.{native,byte}>: use_workflow
-<lib_test/simplex_test.{native,byte}>: pkg_unix
-<lib_test/simplex_test.{native,byte}>: pkg_ocamlgraph
-<lib_test/simplex_test.{native,byte}>: pkg_oUnit
-<lib_test/simplex_test.{native,byte}>: pkg_lwt.unix
-<lib_test/simplex_test.{native,byte}>: pkg_lwt.syntax
-<lib_test/simplex_test.{native,byte}>: pkg_lwt
-<lib_test/simplex_test.{native,byte}>: custom
 # Executable shm_pipe_test
 <lib_test/shm_pipe_test.{native,byte}>: use_workflow
 <lib_test/shm_pipe_test.{native,byte}>: pkg_unix

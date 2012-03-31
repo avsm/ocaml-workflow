@@ -16,9 +16,13 @@ Library workflow
   if system(linux)
     CCLib+: -lrt
 
-Flag tests
-  Description:        Build tests
+Flag perf_tests
+  Description:        Build perf tests
   Default:            true
+
+Flag func_tests
+  Description:        Build functional tests
+  Default:            false
 
 Executable shm_pipe_test
   Path:               lib_test
@@ -53,21 +57,21 @@ Executable unix_rpc_test
   BuildDepends:       workflow,lwt,lwt.unix,oUnit
 
 Test simplex_test
-  Run$:               flag(tests)
+  Run$:               flag(func_tests)
   Command:            $simplex_test
   WorkingDirectory:   lib_test
 
 Test shm_pipe_test
-  Run$:               flag(tests)
+  Run$:               flag(perf_tests)
   Command:            $shm_pipe_test
   WorkingDirectory:   lib_test
 
 Test tcp_pipe_test
-  Run$:               flag(tests)
+  Run$:               flag(perf_tests)
   Command:            $tcp_pipe_test
   WorkingDirectory:   lib_test
 
 Test unix_rpc_test
-  Run$:               flag(tests)
+  Run$:               flag(func_tests)
   Command:            $unix_rpc_test
   WorkingDirectory:   lib_test
