@@ -130,7 +130,9 @@ let make_socket ty sockaddr =
     |Unix.ADDR_INET _ -> Unix.PF_INET in
   let fd = Lwt_unix.socket af ty 0 in
   (match af with
-  |Unix.PF_INET -> Lwt_unix.(setsockopt fd SO_REUSEADDR true)
+  |Unix.PF_INET ->
+    Lwt_unix.(setsockopt fd SO_REUSEADDR true);
+    Lwt_unix.(setsockopt fd TCP_NODELAY true);
   |_ -> ());
   fd
   
