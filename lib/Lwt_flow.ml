@@ -41,7 +41,6 @@ type ('a, 'b) t = {
 let make ~rx_stream ~rx_release ~tx_send ~tx_release ~tx_close ~tx_alloc =
   let tx = { tx_send; tx_release; tx_close; tx_alloc } in
   let rx = { rx_stream; rx_release } in
-  let t, u = Lwt.task () in
   {tx; rx; }
 
 module TX = struct
