@@ -159,7 +159,7 @@ let with_client ?(ty=Unix.SOCK_STREAM) sockaddr iters iterfn =
       Lwt_unix.sleep 0.1 >>
       try_lwt 
         Lwt_unix.connect fd sockaddr
-      with Unix.Unix_error((Unix.ECONNREFUSED|Unix.ENOENT),_,_) ->
+      with Unix.Unix_error((Unix.ECONNREFUSED|Unix.ENOENT|Unix.ECONNABORTED),_,_) ->
         connect (n+1)
     end
   in
