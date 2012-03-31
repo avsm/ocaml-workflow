@@ -34,7 +34,7 @@ let dprintf fmt =
 let make_flow h =
   let rx_stream = Lwt_stream.from
     (fun () ->
-      try_lwt
+      match_lwt Lwt_io.read h.ic with
       |"" -> return None
       |x -> return (Some x)
     )
