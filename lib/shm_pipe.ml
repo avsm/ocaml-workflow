@@ -36,8 +36,8 @@ let dprintf fmt =
 (* Given a handle, retrieve a pair of input/output streams *)
 let make_flow handle =
   (* Buffered metadata channels *)
-  let ic = Lwt_io.(of_fd ~mode:input handle.fd) in
-  let oc = Lwt_io.(of_fd ~mode:output handle.fd) in
+  let ic = Lwt_io.(of_fd ~buffer_size:65535 ~mode:input handle.fd) in
+  let oc = Lwt_io.(of_fd ~buffer_size:65535 ~mode:output handle.fd) in
   (* Listeners waiting for new incoming extents *)
   let rx_waiters = Lwt_sequence.create () in
   (* Listeners waiting for free space on the transmit queue *)
