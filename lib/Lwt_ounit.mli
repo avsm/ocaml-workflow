@@ -22,6 +22,10 @@ open OUnit
   *)
 val main : suite_name:string -> tests:test list -> unit
 
+type perf_test = num_clients:int -> client_iters:int -> data_size:int -> test_reps:int -> test list
+
+val main_perf : suite_name:string -> tests:perf_test -> unit
+
 (** Given a label and a test function, return a set of tests each
  * with a unique label number appended, so the test runs [iter] times *)
 val test_iter : string -> test_fun -> int -> test list

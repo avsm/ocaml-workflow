@@ -53,12 +53,40 @@ let repeat v i =
 (* Main loop to invoke a suite of tests *)
 let main ~suite_name ~tests =
   let suite = suite_name >::: tests in
-  let verbose = ref false in
+  let verbose = ref true in
   let set_verbose _ = verbose := true in
   Arg.parse
     [("-verbose", Arg.Unit set_verbose, "Run the test in verbose mode.");]
     (fun x -> raise (Arg.Bad ("Bad argument : " ^ x)))
     ("Usage: " ^ Sys.argv.(0) ^ " [-verbose]");
+  try if not (was_successful (run_test_tt ~verbose:!verbose suite)) then exit 1
+  with Unix.Unix_error (e,_,_) as exn ->
+    eprintf "Unix_error %s: %s\n%!" (Unix.error_message e) (Printexc.to_string exn);
+    raise exn
+
+type perf_test = num_clients:int -> client_iters:int -> data_size:int -> test_reps:int -> test list
+(* Main loop parameterised by data size, client iterations suitable for performance
+ * comparisons by external scripts *)
+let main_perf ~suite_name ~(tests:perf_test) =
+  let verbose = ref true in
+  let set_verbose _ = verbose := true in
+  let client_iters = ref 1 in
+  let data_size = ref 1 in
+  let num_clients = ref 1 in
+  let test_reps = ref 1 in
+  Arg.parse
+    [("-verbose", Arg.Unit set_verbose, "Run the test in verbose mode.");
+     ("-client-iters", Arg.Set_int client_iters, "Client RPC iterations.");
+     ("-data-size", Arg.Set_int data_size, "Size of data packets to send.");
+     ("-test-reps", Arg.Set_int test_reps, "Repeat each test N times.");
+     ("-num-clients", Arg.Set_int num_clients, "Number of parallel clients.");
+    ]
+    (fun x -> raise (Arg.Bad ("Bad argument : " ^ x)))
+    ("Usage: " ^ Sys.argv.(0) ^ " [-verbose]");
+  (* Specialise the test list with the parameters *)
+  let tests = tests ~num_clients:!num_clients ~client_iters:!client_iters
+    ~data_size:!data_size ~test_reps:!test_reps in
+  let suite = suite_name >::: tests in
   try if not (was_successful (run_test_tt ~verbose:!verbose suite)) then exit 1
   with Unix.Unix_error (e,_,_) as exn ->
     eprintf "Unix_error %s: %s\n%!" (Unix.error_message e) (Printexc.to_string exn);
