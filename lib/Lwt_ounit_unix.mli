@@ -37,7 +37,7 @@ val with_client : ?ty:Lwt_unix.socket_type -> Lwt_unix.sockaddr -> int -> client
 
 (* Given a list of Lwt threads, run them in independent processes and join until all processes
  * terminal *)
-val run_p : ('a -> 'b Lwt.t) list -> 'a -> unit
+val run_p : name:string -> ('a -> 'b Lwt.t) list -> 'a -> unit
 
 type procset = { server : server_fun; clients : client_fun list; }
 

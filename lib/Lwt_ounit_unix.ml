@@ -150,7 +150,7 @@ let with_server ?(ty=Unix.SOCK_STREAM) sockaddr iters (fn:server_fun) () =
     return ();
     end
 
-let with_client ?(ty=Unix.SOCK_STREAM) sockaddr iters iterfn =
+let with_client ?(ty=Unix.SOCK_STREAM) sockaddr arg clientfn =
   let fd = make_socket ty sockaddr in
   let rec connect =
     function
@@ -166,7 +166,7 @@ let with_client ?(ty=Unix.SOCK_STREAM) sockaddr iters iterfn =
   lwt () = connect 0 in
   let iter_t () = 
     try_lwt
-      iterfn fd sockaddr iters
+      clientfn fd sockaddr arg
     finally 
       Unix.close (Lwt_unix.unix_file_descr fd);
       return ()
@@ -181,13 +181,16 @@ let make_unix_sockaddr ?(name="foo") () =
 let make_tcp_sockaddr ?(port=6788) () =
   Unix.ADDR_INET (Unix.inet_addr_loopback, port)
 
-let run_p fns v =
+let run_p ~name fns v =
   (* TODO: add a logger here that could capture the process output *)
+  Gc.compact ();
+  let t1 = Unix.gettimeofday () in
   let rec fork_all acc =
     function
     |fn::tl -> begin
       match Lwt_unix.fork () with
       |0 -> begin (* child *)
+        Random.self_init ();
         try lwt_run fn v
         with exn -> exit 1
       end
@@ -196,7 +199,9 @@ let run_p fns v =
     |[] -> List.rev acc
   in      
   let pids = fork_all [] fns in
-  test_waitpid pids
+  test_waitpid pids;
+  let t2 = Unix.gettimeofday () in
+  eprintf "time %s %d %f\n%!" name (Unix.getpid ()) (t2 -. t1)
 
 type procset = {
  server: server_fun;
@@ -214,5 +219,5 @@ let test_procset_p ~name ~iters ?(ty=Lwt_unix.SOCK_STREAM) ps sockaddr () =
          cfn ()
     ) ps.clients
   in 
-  run_p (server::clients) ()
+  run_p ~name (server::clients) ()
 
