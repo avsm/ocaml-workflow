@@ -64,16 +64,20 @@ let client fd sockaddr num_iters =
       Lwt_flow.RX.release ch ext
     ) ch
 
-let shm_pipe_test ~rpc_iters =
+let shm_pipe_test ~rpc_iters ~clients =
   let open Lwt_ounit_unix in
-  let clients = [ client; ] in
-  let ps = { server = server (List.length clients); clients } in
-  (* Generate a random sockpath, and do not use tempfile, as 
-   * that may be a no-exec mount point *) 
-  let sockaddr = make_unix_sockaddr ~name:"shm_pipe" () in
-  "rpc_ping_smoke" >::= test_procset_p ~name:"rpc_ping"
-    ~ty:Lwt_unix.SOCK_DGRAM ~iters:rpc_iters ps sockaddr
+  let num_clients = List.length clients in
+  let ps = { server = server num_clients; clients } in
+  let name = sprintf "shm_pipe_%d_clients_%d_iters" num_clients rpc_iters in
+  let sockaddr = make_unix_sockaddr ~name () in
+  name >::= test_procset_p ~name ~ty:Lwt_unix.SOCK_DGRAM ~iters:rpc_iters ps sockaddr
 
 let _ =
-  let tests = shm_pipe_test ~rpc_iters:10000 10 in
+  let tests =  List.flatten (
+    Array.to_list (Array.map (fun num_clients ->
+       let clients = repeat client num_clients in
+       shm_pipe_test ~rpc_iters:100000 ~clients 2
+    ) (Array.init 1 (fun x -> x+1)))
+   )
+  in
   Lwt_ounit.main ~suite_name:"shm_pipe_test" ~tests
