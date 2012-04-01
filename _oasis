@@ -11,7 +11,7 @@ Library workflow
   Path:       lib
   Findlibname: workflow
   Modules: Shm,Simplex,Shm_pipe,Lwt_rpc,Lwt_rpc_unix,Lwt_ounit_unix,Lwt_flow,Tcp_pipe
-  BuildDepends:	lwt.syntax, lwt, lwt.unix, ocamlgraph, unix, oUnit
+  BuildDepends:	lwt.syntax, lwt, lwt.unix, ocamlgraph, unix, oUnit, bitstring, bitstring.syntax
   CSources: shmem_stubs.c,simplex_stubs.c
   if system(linux)
     CCLib+: -lrt
@@ -59,16 +59,6 @@ Executable unix_rpc_test
 Test simplex_test
   Run$:               flag(func_tests)
   Command:            $simplex_test
-  WorkingDirectory:   lib_test
-
-Test shm_pipe_test
-  Run$:               flag(perf_tests)
-  Command:            $shm_pipe_test
-  WorkingDirectory:   lib_test
-
-Test tcp_pipe_test
-  Run$:               flag(perf_tests)
-  Command:            $tcp_pipe_test
   WorkingDirectory:   lib_test
 
 Test unix_rpc_test
