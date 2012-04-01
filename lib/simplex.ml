@@ -52,6 +52,12 @@ let attach_rx fd nr_bytes =
 let has_free_space ring =
   Raw.free_space ring
 
+let make_rx ring off len =
+  ring, (off,len)
+
+let make_tx ring off len =
+  ring, (off,len)
+
 let alloc ring len =
   let extent = Raw.alloc ring len in
   match Raw.valid_extent extent with

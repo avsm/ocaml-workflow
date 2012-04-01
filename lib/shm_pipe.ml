@@ -29,6 +29,21 @@ type handle = {
   mutable rx_closed: bool;
 }
 
+module MD = struct
+
+  let msg_send oc off len =
+    let (v,_,_) = BITSTRING { 0:2; off:30; len:31 } in
+    Lwt_io.write oc v
+
+  let msg_free oc off len =
+    let (v,_,_) = BITSTRING { 1:2; off:30; len:31 } in
+    Lwt_io.write oc v
+
+  let msg_close oc =
+    let (v,_,_) = BITSTRING { 2:2; 0L: 62 } in
+    Lwt_io.write oc v
+end
+
 let dprintf fmt =
   let xfn ch = fprintf ch fmt in
   kfprintf xfn stderr "[%d] " (Unix.getpid())
@@ -86,34 +101,45 @@ let make_flow handle =
   (* Release a local TX buffer transmitter has decided not to use
    * any more *)
   let tx_release ext = Simplex.release ext; return () in
-  (* Tx functions to push the correct metadata *)
-  let md_write op = try_lwt Lwt_io.write_value oc op with exn -> return () in
   (* XXX notify the transmitter that the receiver has stopped listening, somehow.
    * Right now we just ignore the metadata pipe disappearing *)
-  let tx_send extent =
-     try_lwt Lwt_io.write_value oc (Simplex.to_send_op extent) >> return true
-     with exn -> return false 
+  let tx_send ext =
+    try_lwt
+      MD.msg_send oc (Simplex.offset ext) (Simplex.length ext) >>
+      return true
+    with exn -> return false
   in  
-  let tx_close () = md_write (Simplex.to_close_op) in
-  let rx_release extent = md_write(Simplex.to_free_op extent) in
+  let tx_close () =
+    MD.msg_close oc
+  in
+  let rx_release ext =
+    MD.msg_free oc (Simplex.offset ext) (Simplex.length ext) 
+  in
   (* The metadata pipe coordinates all this *)
   let _ =
+    let rbuf = String.create 8 in
+    let rbs = rbuf, 0, (8*8) in
     (* Create a buffered pipe *)
     try_lwt while_lwt true do
-      Lwt_io.read_value ic >|= Simplex.on_op 
-        ~rx:handle.rx ~tx:handle.tx
-        ~send:(fun extent -> (* received a Send *)
-           match Lwt_sequence.take_opt_l rx_waiters with
-           |None -> ignore(Lwt_sequence.add_r extent rx_q)
-           |Some u -> Lwt.wakeup u (Some extent))
-        ~free:(fun extent -> (* received a Free *)
-           Simplex.release extent;
-           match Lwt_sequence.take_opt_l tx_waiters with
+      lwt () = Lwt_io.read_into_exactly ic rbuf 0 8 in
+      bitmatch rbs with
+      | {0:2; off:30; len:31} ->
+           let ext = Simplex.make_rx handle.rx off len in
+           (match Lwt_sequence.take_opt_l rx_waiters with
+           |None -> ignore(Lwt_sequence.add_r ext rx_q)
+           |Some u -> Lwt.wakeup u (Some ext));
+           return ()
+      | {1:2; off:30; len:31} ->
+           let ext = Simplex.make_tx handle.tx off len in
+           Simplex.release ext;
+           (match Lwt_sequence.take_opt_l tx_waiters with
            |None -> ()
-           |Some u -> Lwt.wakeup u ()) 
-        ~close:(fun rx -> (* Rx ring is now Closed *)
+           |Some u -> Lwt.wakeup u ());
+           return ();
+      | {2:2; 0:30 } ->
            handle.rx_closed <- true;
-           Lwt_sequence.iter_l (fun u -> Lwt.wakeup u None) rx_waiters)
+           Lwt_sequence.iter_l (fun u -> Lwt.wakeup u None) rx_waiters;
+           return ()
     done with exn ->
       handle.rx_closed <- true;
       Lwt_sequence.iter_l (fun u -> Lwt.wakeup u None) rx_waiters;

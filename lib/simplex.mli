@@ -31,6 +31,9 @@ val buffer  : [<`tx|`rx] extent -> buf
 val length  : [<`tx|`rx] extent -> int
 val offset  : [<`tx|`rx] extent -> int
 
+val make_rx : [`rx] ring -> int -> int -> [`rx] extent
+val make_tx : [`tx] ring -> int -> int -> [`tx] extent
+
 (* Metadata operations to free received extents or transmit new extents *)
 type op
 val to_send_op : 'a extent -> op
