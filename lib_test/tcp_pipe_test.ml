@@ -71,5 +71,5 @@ let tcp_pipe_test ~rpc_iters =
     ~ty:Lwt_unix.SOCK_STREAM ~iters:rpc_iters ps sockaddr
 
 let _ =
-  let tests = tcp_pipe_test ~rpc_iters:10000 10 in
+  let tests = tcp_pipe_test ~rpc_iters:100000 2 in
   Lwt_ounit.main ~suite_name:"rpc_tcp" ~tests
