@@ -25,4 +25,8 @@ val main : suite_name:string -> tests:test list -> unit
 (** Given a label and a test function, return a set of tests each
  * with a unique label number appended, so the test runs [iter] times *)
 val test_iter : string -> test_fun -> int -> test list
+
+(* Repeat a value [n] times and return it as a list *)
+val repeat : 'a -> int -> 'a list
+
 val (>::=) : string -> test_fun -> int -> test list

@@ -43,6 +43,13 @@ let test_iter label test_fun =
 
 let (>::=) = test_iter
 
+let repeat v i =
+  let rec fn acc =
+    function
+    |0 -> acc
+    |n -> fn (v :: acc) (n-1)
+  in fn [] i
+
 (* Main loop to invoke a suite of tests *)
 let main ~suite_name ~tests =
   let suite = suite_name >::: tests in
