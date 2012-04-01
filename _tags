@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 127424593fe700d1564e73ef085e4afe)
+# DO NOT EDIT (digest: eb0a351a6b620a9fa4ce6005fd5615ef)
 # Ignore VCS directories, you can use the same kind of rule outside 
 # OASIS_START/STOP if you want to exclude directories that contains 
 # useless stuff for the build process
@@ -78,17 +78,6 @@
 <lib_test/simplex_test.{native,byte}>: pkg_bitstring.syntax
 <lib_test/simplex_test.{native,byte}>: pkg_bitstring
 <lib_test/simplex_test.{native,byte}>: custom
-# Executable flow_test
-<lib_test/flow_test.{native,byte}>: use_workflow
-<lib_test/flow_test.{native,byte}>: pkg_unix
-<lib_test/flow_test.{native,byte}>: pkg_ocamlgraph
-<lib_test/flow_test.{native,byte}>: pkg_oUnit
-<lib_test/flow_test.{native,byte}>: pkg_lwt.unix
-<lib_test/flow_test.{native,byte}>: pkg_lwt.syntax
-<lib_test/flow_test.{native,byte}>: pkg_lwt
-<lib_test/flow_test.{native,byte}>: pkg_bitstring.syntax
-<lib_test/flow_test.{native,byte}>: pkg_bitstring
-<lib_test/flow_test.{native,byte}>: custom
 # Executable shm_pipe_test
 <lib_test/shm_pipe_test.{native,byte}>: use_workflow
 <lib_test/shm_pipe_test.{native,byte}>: pkg_unix
