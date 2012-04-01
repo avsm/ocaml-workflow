@@ -24,7 +24,7 @@ let dprintf fmt =
   let xfn ch = fprintf ch fmt in
   kfprintf xfn stderr "[%d] " (Unix.getpid ())
 
-let server num_clients fd sa client_iters =
+let server ~num_clients ~client_iters ~data_size fd sa arg =
   let listen_stream = Shm_pipe.listen fd in
   let th,u = Lwt.task () in
   let n = ref 0 in
@@ -34,7 +34,7 @@ let server num_clients fd sa client_iters =
     lwt () =
       for_lwt i = 0 to client_iters - 1 do
         let data = sprintf "%d*\n%!" i in
-        lwt ext = Lwt_flow.TX.alloc ch (String.length data) in
+        lwt ext = Lwt_flow.TX.alloc ch data_size in
         let buf = Simplex.buffer ext in
         Lwt_bytes.blit_string_bytes data 0 buf 0 (String.length data);
         match_lwt Lwt_flow.TX.send ch ext with
@@ -55,7 +55,7 @@ let server num_clients fd sa client_iters =
   Lwt.cancel listen_t;
   return ()
 
-let client fd sockaddr num_iters =
+let client_fun ~client_iters ~data_size fd sockaddr client_iters =
   lwt h = Shm_pipe.connect fd in
   let ch = Shm_pipe.make_flow h in
   Lwt_flow.RX.recv
@@ -64,20 +64,16 @@ let client fd sockaddr num_iters =
       Lwt_flow.RX.release ch ext
     ) ch
 
-let shm_pipe_test ~rpc_iters ~clients =
+let tests ~num_clients ~client_iters ~data_size ~test_reps =
   let open Lwt_ounit_unix in
-  let num_clients = List.length clients in
-  let ps = { server = server num_clients; clients } in
-  let name = sprintf "shm_pipe_%d_clients_%d_iters" num_clients rpc_iters in
+  (* Generate the clients based on the number of parallel needed *)
+  let clients = repeat (client_fun ~client_iters ~data_size) num_clients in
+  (* Generate the server tester *)
+  let server = server ~num_clients ~client_iters ~data_size in
+  (* The client server pair *)
+  let ps = { server; clients } in
+  let name = sprintf "shm_pipe_%d_clients_%d_iters_%d_dsize" num_clients client_iters data_size in
   let sockaddr = make_unix_sockaddr ~name () in
-  name >::= test_procset_p ~name ~ty:Lwt_unix.SOCK_DGRAM ~iters:rpc_iters ps sockaddr
+  (name >::= test_procset_p ~name ~ty:Lwt_unix.SOCK_DGRAM ~iters:client_iters ps sockaddr) test_reps
 
-let _ =
-  let tests =  List.flatten (
-    Array.to_list (Array.map (fun num_clients ->
-       let clients = repeat client num_clients in
-       shm_pipe_test ~rpc_iters:100000 ~clients 2
-    ) (Array.init 1 (fun x -> x+1)))
-   )
-  in
-  Lwt_ounit.main ~suite_name:"shm_pipe_test" ~tests
+let _ = main_perf ~suite_name:"shm_pipe" ~tests
