@@ -24,7 +24,7 @@
  * signifying that they're done.
  */
 
-#undef NDEBUG
+#define NDEBUG
 #define _GNU_SOURCE
 #include <sys/poll.h>
 #include <sys/time.h>
@@ -84,7 +84,6 @@ typedef struct {
 
 #define SIMPLEX_SEND ((simplex_id_t){1})
 #define SIMPLEX_RECV ((simplex_id_t){0})
-#define MAX_ALLOC_NODES 50
 
 /* A single simplex shared buffer, of configurable page size */
 struct shmem_simplex {
